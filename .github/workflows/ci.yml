@@ -96,12 +96,30 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Generate CI signing keystore
+        run: |
+          mkdir -p composeApp
+          keytool -genkeypair -v \
+            -keystore composeApp/velocity-release.jks \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias velocity \
+            -storepass velocity -keypass velocity \
+            -dname "CN=Velocity, OU=Dev, O=Velocity, L=Unknown, ST=Unknown, C=US"
+
       - name: Run KMP & Android Unit Tests
+        env:
+          VELOCITY_KEYSTORE_PASSWORD: velocity
+          VELOCITY_KEY_ALIAS: velocity
+          VELOCITY_KEY_PASSWORD: velocity
         run: |
           chmod +x gradlew || true
           ./gradlew :composeApp:testDebugUnitTest :composeApp:desktopTest --stacktrace
 
-      - name: Assemble Android APK
+      - name: Assemble Android APK (Signed)
+        env:
+          VELOCITY_KEYSTORE_PASSWORD: velocity
+          VELOCITY_KEY_ALIAS: velocity
+          VELOCITY_KEY_PASSWORD: velocity
         run: |
           ./gradlew :composeApp:assembleDebug :composeApp:assembleRelease --stacktrace
 

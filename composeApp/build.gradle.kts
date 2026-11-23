@@ -83,9 +83,41 @@ android {
         applicationId = "com.velocity.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            val localReleaseKeystore = file("velocity-release.jks")
+            val buildKeystore = file("build/velocity-release.jks")
+            val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+
+            when {
+                localReleaseKeystore.exists() -> {
+                    storeFile = localReleaseKeystore
+                    storePassword = System.getenv("VELOCITY_KEYSTORE_PASSWORD") ?: "velocity"
+                    keyAlias = System.getenv("VELOCITY_KEY_ALIAS") ?: "velocity"
+                    keyPassword = System.getenv("VELOCITY_KEY_PASSWORD") ?: "velocity"
+                }
+                buildKeystore.exists() -> {
+                    storeFile = buildKeystore
+                    storePassword = System.getenv("VELOCITY_KEYSTORE_PASSWORD") ?: "velocity"
+                    keyAlias = System.getenv("VELOCITY_KEY_ALIAS") ?: "velocity"
+                    keyPassword = System.getenv("VELOCITY_KEY_PASSWORD") ?: "velocity"
+                }
+                debugKeystore.exists() -> {
+                    storeFile = debugKeystore
+                    storePassword = "android"
+                    keyAlias = "androiddebugkey"
+                    keyPassword = "android"
+                }
+                else -> {
+                    initWith(getByName("debug"))
+                }
+            }
+        }
     }
 
     packaging {
@@ -100,6 +132,7 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

@@ -85,10 +85,33 @@ jobs:
             build --release -p velocity-jni
           cd ..
 
-      - name: Build Android Release APK
+      - name: Generate release signing keystore
+        run: |
+          mkdir -p composeApp
+          if [ -n "$VELOCITY_KEYSTORE_BASE64" ]; then
+            echo "$VELOCITY_KEYSTORE_BASE64" | base64 -d > composeApp/velocity-release.jks
+          else
+            keytool -genkeypair -v \
+              -keystore composeApp/velocity-release.jks \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias velocity \
+              -storepass velocity -keypass velocity \
+              -dname "CN=Velocity, OU=Dev, O=Velocity, L=Unknown, ST=Unknown, C=US"
+          fi
+        env:
+          VELOCITY_KEYSTORE_BASE64: ${{ secrets.VELOCITY_KEYSTORE_BASE64 }}
+
+      - name: Build Android APKs (Signed Release & Debug)
+        env:
+          VELOCITY_KEYSTORE_PASSWORD: ${{ secrets.VELOCITY_KEYSTORE_PASSWORD || 'velocity' }}
+          VELOCITY_KEY_ALIAS: ${{ secrets.VELOCITY_KEY_ALIAS || 'velocity' }}
+          VELOCITY_KEY_PASSWORD: ${{ secrets.VELOCITY_KEY_PASSWORD || 'velocity' }}
         run: |
           chmod +x gradlew || true
-          ./gradlew :composeApp:assembleRelease --stacktrace
+          ./gradlew :composeApp:assembleRelease :composeApp:assembleDebug --stacktrace
+          mkdir -p dist-android
+          cp composeApp/build/outputs/apk/release/*.apk dist-android/velocity-${{ github.ref_name }}.apk
+          cp composeApp/build/outputs/apk/debug/*.apk dist-android/velocity-${{ github.ref_name }}-debug.apk
 
       - name: Build Desktop UberJar
         run: |
@@ -102,7 +125,7 @@ jobs:
         with:
           name: apps-artifacts
           path: |
-            composeApp/build/outputs/apk/release/*.apk
+            dist-android/*.apk
             dist-desktop/*.zip
 
   publish-release:
