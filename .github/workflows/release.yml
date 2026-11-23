@@ -119,10 +119,11 @@ jobs:
           path: release-assets
           merge-multiple: true
 
-      - name: Generate SHA256 checksums
-        working-directory: release-assets
+      - name: Flatten release assets & Generate SHA256 checksums
         run: |
-          ls -la
+          mkdir -p final-assets
+          find release-assets -type f \( -name "*.apk" -o -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} final-assets/ \;
+          cd final-assets
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
@@ -130,7 +131,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release-assets/*
+            final-assets/*
           draft: false
           prerelease: false
           generate_release_notes: true
