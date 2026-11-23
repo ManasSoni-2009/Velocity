@@ -3,6 +3,7 @@ package com.velocity.app.ui.components
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -12,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -25,6 +27,11 @@ import com.velocity.app.domain.ConnectionState
 import com.velocity.app.domain.ConnectionStatus
 import com.velocity.app.ui.theme.VelocityColors
 
+/**
+ * 21st.dev inspired Multipath Stream Convergence Visualizer.
+ * Displays dynamic animated packet flow from independent Wi-Fi and Cellular channels
+ * converging into a single bonded super-pipe with live aggregation efficiency.
+ */
 @Composable
 fun StreamVisualizer(
     status: ConnectionStatus,
@@ -40,18 +47,23 @@ fun StreamVisualizer(
         targetValue = 60f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = if (isBonded) 1200 else if (isConnecting) 2000 else 6000,
+                durationMillis = if (isBonded) 1000 else if (isConnecting) 1800 else 6000,
                 easing = LinearEasing,
             ),
             repeatMode = RepeatMode.Restart,
         ),
     )
 
+    val cardBorder = Brush.verticalGradient(
+        listOf(Color(0xFF334155).copy(alpha = 0.6f), Color(0xFF0F172A).copy(alpha = 0.3f)),
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xFF0F172A).copy(alpha = 0.5f))
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xFF0F172A).copy(alpha = 0.85f))
+            .border(1.dp, cardBorder, RoundedCornerShape(22.dp))
             .padding(14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -60,18 +72,29 @@ fun StreamVisualizer(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                VelocityIcons.LightningBolt(
+                    color = VelocityColors.CyanGlow,
+                    size = 14.dp,
+                    filled = true,
+                )
+                Text(
+                    text = "MULTIPATH STREAM ENGINE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+
             Text(
-                text = "MULTIPATH STREAM FLOW",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                color = Color.White.copy(alpha = 0.6f),
-            )
-            Text(
-                text = if (isBonded) "Aggregated: ${telemetry.aggregationEfficiencyPercent}% Eff." else "Standby",
+                text = if (isBonded) "Efficiency: ${telemetry.aggregationEfficiencyPercent}%" else "Standby",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isBonded) VelocityColors.CombinedGlow else Color.White.copy(alpha = 0.4f),
+                color = if (isBonded) VelocityColors.CombinedGlow else Color.White.copy(alpha = 0.45f),
             )
         }
 
@@ -88,114 +111,107 @@ fun StreamVisualizer(
             val midY = height / 2f
             val topY = height * 0.22f
             val botY = height * 0.78f
-            val mergeX = width * 0.62f
+            val mergeX = width * 0.60f
 
             // Dashed stroke animation effect
             val dashEffect = if (isBonded || isConnecting) {
-                PathEffect.dashPathEffect(floatArrayOf(18f, 12f), streamPhase)
+                PathEffect.dashPathEffect(floatArrayOf(16f, 10f), streamPhase)
             } else {
                 PathEffect.dashPathEffect(floatArrayOf(8f, 16f), 0f)
             }
 
-            // Path 0: Wi-Fi beam (Top curve converging to center)
+            // Path 0: Wi-Fi stream (Top curve converging to center)
             val wifiPath = Path().apply {
-                moveTo(20f, topY)
+                moveTo(24f, topY)
                 cubicTo(
-                    x1 = mergeX * 0.4f, y1 = topY,
-                    x2 = mergeX * 0.8f, y2 = midY,
-                    x3 = mergeX, y3 = midY,
+                    mergeX * 0.4f, topY,
+                    mergeX * 0.8f, midY,
+                    mergeX, midY,
                 )
             }
-            drawPath(
-                path = wifiPath,
-                color = if (telemetry.wifi.active) VelocityColors.WifiLink else VelocityColors.WifiLink.copy(alpha = 0.25f),
-                style = Stroke(
-                    width = if (isBonded && telemetry.wifi.active) 5f else 3f,
-                    cap = StrokeCap.Round,
-                    pathEffect = dashEffect,
-                ),
-            )
 
-            // Path 1: Cellular beam (Bottom curve converging to center)
-            val cellularPath = Path().apply {
-                moveTo(20f, botY)
+            // Path 1: Cellular stream (Bottom curve converging to center)
+            val cellPath = Path().apply {
+                moveTo(24f, botY)
                 cubicTo(
-                    x1 = mergeX * 0.4f, y1 = botY,
-                    x2 = mergeX * 0.8f, y2 = midY,
-                    x3 = mergeX, y3 = midY,
+                    mergeX * 0.4f, botY,
+                    mergeX * 0.8f, midY,
+                    mergeX, midY,
                 )
             }
-            drawPath(
-                path = cellularPath,
-                color = if (telemetry.cellular.active) VelocityColors.CellularLink else VelocityColors.CellularLink.copy(alpha = 0.25f),
-                style = Stroke(
-                    width = if (isBonded && telemetry.cellular.active) 5f else 3f,
-                    cap = StrokeCap.Round,
-                    pathEffect = dashEffect,
-                ),
-            )
 
-            // Combined Tunnel Pipe (from mergeX to end of canvas)
-            val combinedPath = Path().apply {
+            // Path 2: Combined Bonded stream (Out to right edge)
+            val bondedPath = Path().apply {
                 moveTo(mergeX, midY)
-                lineTo(width - 20f, midY)
+                lineTo(width - 24f, midY)
             }
+
+            // Inactive guide rails
             drawPath(
-                path = combinedPath,
-                color = if (isBonded) VelocityColors.CombinedGlow else Color.White.copy(alpha = 0.2f),
-                style = Stroke(
-                    width = if (isBonded) 8f else 4f,
-                    cap = StrokeCap.Round,
-                    pathEffect = dashEffect,
-                ),
+                wifiPath,
+                color = VelocityColors.WifiLink.copy(alpha = 0.18f),
+                style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
+            )
+            drawPath(
+                cellPath,
+                color = VelocityColors.CellularLink.copy(alpha = 0.18f),
+                style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round),
+            )
+            drawPath(
+                bondedPath,
+                color = VelocityColors.CombinedGlow.copy(alpha = 0.22f),
+                style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round),
             )
 
-            // Convergence node pulse
-            if (isBonded) {
-                drawCircle(
-                    color = VelocityColors.CyanGlow,
-                    radius = 7f,
-                    center = Offset(mergeX, midY),
+            // Animated dynamic pulses
+            if (isBonded || isConnecting) {
+                drawPath(
+                    wifiPath,
+                    brush = VelocityColors.WifiBeamBrush,
+                    style = Stroke(
+                        width = 3.dp.toPx(),
+                        pathEffect = dashEffect,
+                        cap = StrokeCap.Round,
+                    ),
                 )
+                drawPath(
+                    cellPath,
+                    brush = VelocityColors.CellularBeamBrush,
+                    style = Stroke(
+                        width = 3.dp.toPx(),
+                        pathEffect = dashEffect,
+                        cap = StrokeCap.Round,
+                    ),
+                )
+                if (isBonded) {
+                    drawPath(
+                        bondedPath,
+                        brush = VelocityColors.CombinedBeamBrush,
+                        style = Stroke(
+                            width = 5.dp.toPx(),
+                            pathEffect = dashEffect,
+                            cap = StrokeCap.Round,
+                        ),
+                    )
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Beam weight ratio indicators
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(VelocityColors.WifiLink),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Wi-Fi: ${telemetry.wifi.schedulerWeightPercent}% (${telemetry.wifi.downloadMbps.toInt()} Mbps)",
-                    fontSize = 11.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(VelocityColors.CellularLink),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Cellular: ${telemetry.cellular.schedulerWeightPercent}% (${telemetry.cellular.downloadMbps.toInt()} Mbps)",
-                    fontSize = 11.sp,
-                    color = Color.White.copy(alpha = 0.7f),
-                )
-            }
+            // Channel Origin and Convergence Nodes
+            drawCircle(
+                color = VelocityColors.WifiLink,
+                radius = 4.dp.toPx(),
+                center = Offset(24f, topY),
+            )
+            drawCircle(
+                color = VelocityColors.CellularLink,
+                radius = 4.dp.toPx(),
+                center = Offset(24f, botY),
+            )
+            drawCircle(
+                color = if (isBonded) VelocityColors.CombinedGlow else Color.Gray,
+                radius = 6.dp.toPx(),
+                center = Offset(mergeX, midY),
+            )
         }
     }
 }

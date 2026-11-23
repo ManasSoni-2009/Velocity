@@ -214,12 +214,12 @@ class VelocityVpnService : VpnService() {
             multiNetworkManager?.start(nativeHandle)
 
             VpnStateHolder.updateState(
-                state = ConnectionState.BONDED,
-                message = "Connected and bonded",
+                state = ConnectionState.CONNECTING,
+                message = "Connecting & probing paths...",
                 mode = mode,
                 serverId = serverId,
             )
-            updateNotification("Bonded: ${currentMode.label}", 0.0, 0.0)
+            updateNotification("Connecting...", 0.0, 0.0)
 
         } catch (e: Exception) {
             Log.e(TAG, "Tunnel startup failed: ${e.message}", e)

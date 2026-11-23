@@ -42,6 +42,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let _ = NatHelper::setup_nat(&args.tun, &args.wan, &args.subnet);
 
+    #[cfg(target_os = "linux")]
+    let server = match velocity_relay::tun::LinuxTun::create(&args.tun) {
+        Ok(tun) => Arc::new(RelayServer::new(bind_addr, args.psk).with_tun(Arc::new(parking_lot::Mutex::new(tun)))),
+        Err(e) => {
+            tracing::warn!("Could not create Linux TUN: {:?}. Running in userspace echo mode.", e);
+            Arc::new(RelayServer::new(bind_addr, args.psk))
+        }
+    };
+
+    #[cfg(not(target_os = "linux"))]
     let server = Arc::new(RelayServer::new(bind_addr, args.psk));
     let srv_clone = Arc::clone(&server);
 

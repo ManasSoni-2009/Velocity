@@ -163,6 +163,7 @@ data class VelocitySettings(
     val wifiBiasPercent: Int = 70,
     val mtu: Int = 1380,
     val fecEnabled: Boolean = true,
+    val directDnsGuard: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.DARK,
     val reduceTransparency: Boolean = false,
     val highContrast: Boolean = false,

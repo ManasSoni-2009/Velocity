@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +27,10 @@ import com.velocity.app.ui.theme.LocalVelocityA11y
 import com.velocity.app.ui.theme.VelocityColors
 import com.velocity.app.ui.theme.concentricRadius
 
+/**
+ * 21st.dev inspired Floating Glass Navigation Bar.
+ * Integrates concentric radius math, specular reflections, and pure vector icons.
+ */
 @Composable
 fun FloatingNavBar(
     selectedTab: VelocityTab,
@@ -34,15 +39,15 @@ fun FloatingNavBar(
 ) {
     val a11y = LocalVelocityA11y.current
     val outerRadius = 32.dp
-    val pillPadding = 4.dp
+    val pillPadding = 5.dp
     val innerRadius = concentricRadius(outerRadius, pillPadding)
 
     LiquidGlassSurface(
         modifier = modifier
             .padding(horizontal = 24.dp, vertical = 12.dp)
-            .height(64.dp),
+            .height(66.dp),
         cornerRadius = outerRadius,
-        elevation = 16.dp,
+        elevation = 18.dp,
         reduceTransparency = a11y.reduceTransparency,
         highContrast = a11y.highContrast,
     ) {
@@ -56,7 +61,7 @@ fun FloatingNavBar(
             VelocityTab.entries.forEach { tab ->
                 val isSelected = tab == selectedTab
                 val scale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.0f else 0.94f,
+                    targetValue = if (isSelected) 1.0f else 0.92f,
                     animationSpec = spring(
                         dampingRatio = Spring.DampingRatioLowBouncy,
                         stiffness = Spring.StiffnessMedium,
@@ -65,9 +70,12 @@ fun FloatingNavBar(
                 val textColor by animateColorAsState(
                     targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.5f),
                 )
+                val iconColor by animateColorAsState(
+                    targetValue = if (isSelected) VelocityColors.CyanGlow else Color.White.copy(alpha = 0.45f),
+                )
                 val activeBgColor by animateColorAsState(
                     targetValue = if (isSelected) {
-                        if (a11y.highContrast) Color(0xFF1E293B) else VelocityColors.CyanGlow.copy(alpha = 0.18f)
+                        if (a11y.highContrast) Color(0xFF1E293B) else VelocityColors.CyanGlow.copy(alpha = 0.16f)
                     } else {
                         Color.Transparent
                     },
@@ -90,17 +98,35 @@ fun FloatingNavBar(
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.scale(scale),
                     ) {
-                        Text(
-                            text = getTabGlyph(tab),
-                            fontSize = 18.sp,
-                            color = if (isSelected) VelocityColors.CyanGlow else Color.White.copy(alpha = 0.5f),
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        when (tab) {
+                            VelocityTab.BOND -> VelocityIcons.LightningBolt(
+                                color = iconColor,
+                                size = 18.dp,
+                                filled = isSelected,
+                            )
+                            VelocityTab.TELEMETRY -> VelocityIcons.AnalyticsChart(
+                                color = iconColor,
+                                size = 18.dp,
+                            )
+                            VelocityTab.SERVERS -> VelocityIcons.GlobeIcon(
+                                color = iconColor,
+                                size = 18.dp,
+                            )
+                            VelocityTab.SETTINGS -> VelocityIcons.SettingsSliders(
+                                color = iconColor,
+                                size = 18.dp,
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
                         Text(
                             text = tab.title,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            fontSize = 10.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            letterSpacing = 0.4.sp,
                             color = textColor,
                         )
                     }
@@ -108,11 +134,4 @@ fun FloatingNavBar(
             }
         }
     }
-}
-
-private fun getTabGlyph(tab: VelocityTab): String = when (tab) {
-    VelocityTab.BOND -> "⚡"
-    VelocityTab.TELEMETRY -> "📊"
-    VelocityTab.SERVERS -> "🌐"
-    VelocityTab.SETTINGS -> "⚙"
 }

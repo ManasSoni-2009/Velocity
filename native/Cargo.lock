@@ -700,6 +700,7 @@ name = "velocity-core"
 version = "0.1.0"
 dependencies = [
  "byteorder",
+ "libc",
  "parking_lot",
  "rand",
  "serde",

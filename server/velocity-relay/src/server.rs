@@ -46,6 +46,63 @@ impl RelayServer {
         let socket = Arc::new(UdpSocket::bind(self.bind_addr).await?);
         info!("Velocity Multipath Relay listening on UDP {}", self.bind_addr);
 
+        // Spawn TUN to UDP egress reader task
+        if let Some(tun) = &self.tun_device {
+            let tun_clone = Arc::clone(tun);
+            let sessions_clone = Arc::clone(&self.sessions);
+            let socket_clone = Arc::clone(&socket);
+            let running_clone = Arc::clone(&self.running);
+
+            tokio::task::spawn_blocking(move || {
+                let mut tun_buf = [0u8; 2048];
+                while running_clone.load(Ordering::Relaxed) {
+                    let n = {
+                        let mut dev = tun_clone.lock();
+                        match dev.read_packet(&mut tun_buf) {
+                            Ok(n) => n,
+                            Err(_) => {
+                                std::thread::sleep(std::time::Duration::from_millis(2));
+                                continue;
+                            }
+                        }
+                    };
+                    if n == 0 {
+                        continue;
+                    }
+                    let ip_packet = &tun_buf[..n];
+
+                    // Deliver back to active client session
+                    let sessions = sessions_clone.read();
+                    if let Some(session) = sessions.values().next() {
+                        let client_addr = {
+                            let p = session.client_paths.read();
+                            p.get(&0).copied().or_else(|| p.values().next().copied())
+                        };
+                        if let Some(addr) = client_addr {
+                            let seq = session.next_seq();
+                            let mut header = Vl01Header::new(flags::DATA, 0, session.session_id, seq);
+                            let mut out_pkt = vec![0u8; HEADER_SIZE + n + TAG_SIZE];
+                            if header.encode(&mut out_pkt[..HEADER_SIZE]).is_ok() {
+                                let hdr = out_pkt[..HEADER_SIZE].to_vec();
+                                out_pkt[HEADER_SIZE..HEADER_SIZE + n].copy_from_slice(ip_packet);
+                                if let Ok(enc_len) = session.cipher.encrypt_in_place(
+                                    Direction::ServerToClient,
+                                    0,
+                                    seq,
+                                    &hdr,
+                                    &mut out_pkt[HEADER_SIZE..],
+                                    n,
+                                ) {
+                                    let total = HEADER_SIZE + enc_len;
+                                    let _ = socket_clone.try_send_to(&out_pkt[..total], addr);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         let mut buf = vec![0u8; 2048];
 
         while self.running.load(Ordering::SeqCst) {

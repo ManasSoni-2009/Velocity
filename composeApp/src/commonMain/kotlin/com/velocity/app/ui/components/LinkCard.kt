@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -18,6 +19,11 @@ import com.velocity.app.domain.LinkTelemetry
 import com.velocity.app.domain.LinkType
 import com.velocity.app.ui.theme.VelocityColors
 
+/**
+ * 21st.dev inspired Frosted Glass Network Link Card.
+ * Displays live physical path telemetry (RTT, Jitter, Loss, Signal) with
+ * specular glass borders and dedicated vector network icons.
+ */
 @Composable
 fun LinkCard(
     telemetry: LinkTelemetry,
@@ -25,14 +31,22 @@ fun LinkCard(
 ) {
     val isWifi = telemetry.type == LinkType.WIFI
     val accentColor = if (isWifi) VelocityColors.WifiLink else VelocityColors.CellularLink
-    val cardBg = Color(0xFF111827).copy(alpha = 0.85f)
-    val cardBorder = if (telemetry.active) accentColor.copy(alpha = 0.45f) else Color(0xFF1F2937)
+    val cardBg = Color(0xFF0F172A).copy(alpha = 0.85f)
+    val cardBorder = if (telemetry.active) {
+        Brush.verticalGradient(
+            listOf(accentColor.copy(alpha = 0.65f), accentColor.copy(alpha = 0.20f)),
+        )
+    } else {
+        Brush.verticalGradient(
+            listOf(Color(0xFF334155).copy(alpha = 0.5f), Color(0xFF1E293B).copy(alpha = 0.3f)),
+        )
+    }
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(cardBg)
-            .border(1.dp, cardBorder, RoundedCornerShape(18.dp))
+            .border(1.dp, cardBorder, RoundedCornerShape(20.dp))
             .padding(14.dp),
     ) {
         Row(
@@ -45,12 +59,19 @@ fun LinkCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.weight(1f, fill = false),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (telemetry.active) accentColor else Color.Gray),
-                )
+                // Vector icon
+                if (isWifi) {
+                    VelocityIcons.WifiIcon(
+                        color = if (telemetry.active) accentColor else Color.Gray,
+                        size = 18.dp,
+                    )
+                } else {
+                    VelocityIcons.CellularIcon(
+                        color = if (telemetry.active) accentColor else Color.Gray,
+                        size = 18.dp,
+                    )
+                }
+
                 Text(
                     text = if (isWifi) "Wi-Fi" else "Cellular",
                     fontSize = 13.sp,
@@ -59,6 +80,7 @@ fun LinkCard(
                     maxLines = 1,
                     softWrap = false,
                 )
+
                 if (!isWifi) {
                     Box(
                         modifier = Modifier
@@ -140,7 +162,7 @@ fun LinkCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "BDP Allocation Share",
+                    text = "BDP Path Share",
                     fontSize = 10.sp,
                     color = Color.White.copy(alpha = 0.5f),
                 )
@@ -148,22 +170,22 @@ fun LinkCard(
                     text = "${telemetry.schedulerWeightPercent}%",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = accentColor,
+                    color = Color.White.copy(alpha = 0.8f),
                 )
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xFF1F2937)),
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFF1E293B)),
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(fraction = (telemetry.schedulerWeightPercent.coerceIn(0, 100) / 100f))
+                        .fillMaxWidth(fraction = (telemetry.schedulerWeightPercent / 100f).coerceIn(0f, 1f))
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(RoundedCornerShape(2.dp))
                         .background(accentColor),
                 )
             }
@@ -172,18 +194,28 @@ fun LinkCard(
 }
 
 @Composable
-private fun MetricPill(label: String, value: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun MetricPill(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF1E293B).copy(alpha = 0.6f))
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             color = Color.White.copy(alpha = 0.45f),
+            fontWeight = FontWeight.Medium,
         )
-        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
             color = Color.White.copy(alpha = 0.9f),
         )
     }

@@ -202,6 +202,41 @@ private fun LinkBalancingSettingsCard(
                 ),
             )
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Direct DNS Guard Toggle
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f, fill = false)) {
+                Text(
+                    text = "Direct DNS Guard (Port 53)",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White,
+                )
+                Text(
+                    text = "Prevents DNS blackholes via direct Cloudflare/Google resolver",
+                    fontSize = 10.sp,
+                    color = VelocityColors.CyanGlow.copy(alpha = 0.85f),
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = settings.directDnsGuard,
+                onCheckedChange = { checked ->
+                    onUpdateSettings { it.copy(directDnsGuard = checked) }
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Color.White,
+                    checkedTrackColor = VelocityColors.CombinedGlow,
+                    uncheckedTrackColor = Color(0xFF1E293B),
+                ),
+            )
+        }
     }
 }
 

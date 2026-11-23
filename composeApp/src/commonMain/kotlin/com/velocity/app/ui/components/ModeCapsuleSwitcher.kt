@@ -26,6 +26,10 @@ import com.velocity.app.ui.theme.LocalVelocityA11y
 import com.velocity.app.ui.theme.VelocityColors
 import com.velocity.app.ui.theme.concentricRadius
 
+/**
+ * 21st.dev inspired Apple Liquid Glass Segmented Capsule Switcher.
+ * Uses concentric geometry and bespoke vector glyphs.
+ */
 @Composable
 fun ModeCapsuleSwitcher(
     activeMode: BondingMode,
@@ -57,7 +61,7 @@ fun ModeCapsuleSwitcher(
                 val isSelected = mode == activeMode
                 val activeBgColor by animateColorAsState(
                     targetValue = if (isSelected) {
-                        if (a11y.highContrast) Color(0xFF1E293B) else VelocityColors.ElectricBlue.copy(alpha = 0.25f)
+                        if (a11y.highContrast) Color(0xFF1E293B) else VelocityColors.ElectricBlue.copy(alpha = 0.28f)
                     } else {
                         Color.Transparent
                     },
@@ -65,11 +69,9 @@ fun ModeCapsuleSwitcher(
                 val textColor by animateColorAsState(
                     targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.55f),
                 )
-                val glyph = when (mode) {
-                    BondingMode.SPEED -> "🚀"
-                    BondingMode.LOW_LATENCY -> "🎯"
-                    BondingMode.FAILOVER -> "🛡"
-                }
+                val iconColor by animateColorAsState(
+                    targetValue = if (isSelected) VelocityColors.CyanGlow else Color.White.copy(alpha = 0.55f),
+                )
 
                 Box(
                     modifier = Modifier
@@ -87,12 +89,25 @@ fun ModeCapsuleSwitcher(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Text(
-                            text = glyph,
-                            fontSize = 13.sp,
-                        )
+                        when (mode) {
+                            BondingMode.SPEED -> VelocityIcons.LightningBolt(
+                                color = iconColor,
+                                size = 15.dp,
+                                filled = isSelected,
+                            )
+                            BondingMode.LOW_LATENCY -> VelocityIcons.TargetCrosshair(
+                                color = iconColor,
+                                size = 15.dp,
+                            )
+                            BondingMode.FAILOVER -> VelocityIcons.ShieldIcon(
+                                color = iconColor,
+                                size = 15.dp,
+                                filled = isSelected,
+                            )
+                        }
+
                         Text(
                             text = mode.shortLabel,
                             fontSize = 12.sp,
