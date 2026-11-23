@@ -86,6 +86,15 @@ impl ReorderBuffer {
             self.next_expected_seq = seq_num;
         }
 
+        if is_fec {
+            // Track FEC parity packet
+            let block_base = (seq_num / FEC_BLOCK_SIZE as u64) * FEC_BLOCK_SIZE as u64;
+            let tracker = self.fec_blocks.entry(block_base).or_default();
+            tracker.parity = Some(payload.to_vec());
+            self.try_fec_recovery(block_base);
+            return self.drain_consecutive();
+        }
+
         // Duplicate or older than window
         if seq_num < self.next_expected_seq {
             self.dropped_duplicates += 1;
@@ -96,15 +105,6 @@ impl ReorderBuffer {
         if is_duplicate && self.buffer.contains_key(&seq_num) {
             self.dropped_duplicates += 1;
             return ready;
-        }
-
-        if is_fec {
-            // Track FEC parity packet
-            let block_base = (seq_num / FEC_BLOCK_SIZE as u64) * FEC_BLOCK_SIZE as u64;
-            let tracker = self.fec_blocks.entry(block_base).or_default();
-            tracker.parity = Some(payload.to_vec());
-            self.try_fec_recovery(block_base);
-            return self.drain_consecutive();
         }
 
         // Track regular packet in FEC block

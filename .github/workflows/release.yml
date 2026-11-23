@@ -61,14 +61,10 @@ jobs:
           java-version: '17'
 
       - name: Set up Android SDK & NDK
-        uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: 11076708
-
-      - name: Install Android NDK & Build Tools
         run: |
-          yes | sdkmanager --licenses
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" || true
 
       - name: Install Rust toolchain for Android JNI
         uses: dtolnay/rust-toolchain@stable
@@ -80,7 +76,7 @@ jobs:
 
       - name: Build Android JNI libraries (.so)
         env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.2.12479018
         run: |
           mkdir -p composeApp/src/androidMain/jniLibs
           cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \

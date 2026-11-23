@@ -175,24 +175,29 @@ impl MultipathScheduler {
         self.deficits[0] += quantum0;
         self.deficits[1] += quantum1;
 
-        // Choose path that minimizes arrival time while respecting BDP headroom and deficits
+        // Choose path: if one path has no BDP headroom, use other;
+        // Otherwise, balance by deficit and arrival time
         let choose_path0 = if headroom0 <= 0 && headroom1 > 0 {
             false
         } else if headroom1 <= 0 && headroom0 > 0 {
             true
-        } else if est_arrival0_us <= est_arrival1_us && self.deficits[0] >= (pkt_size as i64) {
+        } else if self.deficits[0] >= (pkt_size as i64) && self.deficits[1] < (pkt_size as i64) {
             true
-        } else if self.deficits[1] >= (pkt_size as i64) && est_arrival1_us < est_arrival0_us {
+        } else if self.deficits[1] >= (pkt_size as i64) && self.deficits[0] < (pkt_size as i64) {
             false
+        } else if self.deficits[0] >= (pkt_size as i64) && self.deficits[1] >= (pkt_size as i64) {
+            let ratio0 = self.deficits[0] as f64 / rate0;
+            let ratio1 = self.deficits[1] as f64 / rate1;
+            ratio0 >= ratio1
         } else {
             est_arrival0_us <= est_arrival1_us
         };
 
         if choose_path0 {
-            self.deficits[0] = (self.deficits[0] - (pkt_size as i64)).max(0);
+            self.deficits[0] -= pkt_size as i64;
             ScheduleDecision::SendSingle { path_id: 0 }
         } else {
-            self.deficits[1] = (self.deficits[1] - (pkt_size as i64)).max(0);
+            self.deficits[1] -= pkt_size as i64;
             ScheduleDecision::SendSingle { path_id: 1 }
         }
     }
