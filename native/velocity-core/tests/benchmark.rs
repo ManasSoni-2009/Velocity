@@ -115,24 +115,18 @@ async fn test_simulated_dual_link_aggregation_benchmark() {
     let mut rtt_latencies: Vec<f64> = Vec::new();
     let mut total_delivered_bytes: u64 = 0;
 
-    let recv_deadline = Instant::now() + Duration::from_millis(300);
-    while Instant::now() < recv_deadline {
-        match tokio::time::timeout(Duration::from_millis(50), delivered_rx.recv()).await {
-            Ok(Some((pkt_seq, rtt))) => {
-                rtt_latencies.push(rtt.as_secs_f64() * 1000.0);
-                let ready = reorder.push(
-                    pkt_seq,
-                    false,
-                    false,
-                    &packet_data,
-                    (wifi_rtt * 1000.0) as u32,
-                    (cell_rtt * 1000.0) as u32,
-                );
-                for pkt in ready {
-                    total_delivered_bytes += pkt.len() as u64;
-                }
-            }
-            _ => break,
+    while let Ok(Some((pkt_seq, rtt))) = tokio::time::timeout(Duration::from_millis(150), delivered_rx.recv()).await {
+        rtt_latencies.push(rtt.as_secs_f64() * 1000.0);
+        let ready = reorder.push(
+            pkt_seq,
+            false,
+            false,
+            &packet_data,
+            (wifi_rtt * 1000.0) as u32,
+            (cell_rtt * 1000.0) as u32,
+        );
+        for pkt in ready {
+            total_delivered_bytes += pkt.len() as u64;
         }
     }
 

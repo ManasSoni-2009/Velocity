@@ -168,12 +168,15 @@ impl MultipathScheduler {
         let headroom0 = (bdp0 as isize) - (p0.in_flight_bytes as isize);
         let headroom1 = (bdp1 as isize) - (p1.in_flight_bytes as isize);
 
-        // Update deficits based on delivery rate ratios
+        // Quantum proportional to delivery rate
         let quantum0 = ((rate0 / 8.0) * 0.005).clamp(1500.0, 32768.0) as i64;
         let quantum1 = ((rate1 / 8.0) * 0.005).clamp(1500.0, 32768.0) as i64;
 
-        self.deficits[0] += quantum0;
-        self.deficits[1] += quantum1;
+        // Replenish deficits when both paths are out of quota for this packet size
+        if self.deficits[0] < (pkt_size as i64) && self.deficits[1] < (pkt_size as i64) {
+            self.deficits[0] += quantum0;
+            self.deficits[1] += quantum1;
+        }
 
         // Choose path: if one path has no BDP headroom, use other;
         // Otherwise, balance by deficit and arrival time
@@ -186,9 +189,7 @@ impl MultipathScheduler {
         } else if self.deficits[1] >= (pkt_size as i64) && self.deficits[0] < (pkt_size as i64) {
             false
         } else if self.deficits[0] >= (pkt_size as i64) && self.deficits[1] >= (pkt_size as i64) {
-            let ratio0 = self.deficits[0] as f64 / rate0;
-            let ratio1 = self.deficits[1] as f64 / rate1;
-            ratio0 >= ratio1
+            (self.deficits[0] as f64 / rate0) > (self.deficits[1] as f64 / rate1)
         } else {
             est_arrival0_us <= est_arrival1_us
         };
