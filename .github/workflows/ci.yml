@@ -79,9 +79,11 @@ jobs:
         run: |
           if [ -f "native/Cargo.toml" ]; then
             mkdir -p composeApp/src/androidMain/jniLibs
+            cd native
             cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
-              -o composeApp/src/androidMain/jniLibs \
-              build --release --manifest-path native/Cargo.toml -p velocity-jni
+              -o ../composeApp/src/androidMain/jniLibs \
+              build --release -p velocity-jni
+            cd ..
           fi
 
       - name: Cache Gradle packages
