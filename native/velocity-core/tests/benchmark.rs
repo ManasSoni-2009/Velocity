@@ -89,13 +89,16 @@ async fn test_simulated_dual_link_aggregation_benchmark() {
 
     drop(wifi_tx);
     drop(cell_tx);
+    drop(delivered_tx); // Drop local sender so channel can close when all workers complete
 
-    // Receiver reorder buffer
+    // Receiver reorder buffer initialized to expect sequence 1
     let mut reorder = ReorderBuffer::new(4096);
+    reorder.reset_seq(1);
     let mut rtt_latencies: Vec<f64> = Vec::new();
     let mut total_delivered_bytes: u64 = 0;
 
-    while let Some((pkt_seq, rtt)) = delivered_rx.recv().await {
+    // Drain with a safe per-packet timeout to prevent any deadlock in CI
+    while let Ok(Some((pkt_seq, rtt))) = tokio::time::timeout(Duration::from_secs(5), delivered_rx.recv()).await {
         rtt_latencies.push(rtt.as_secs_f64() * 1000.0);
         let ready = reorder.push(
             pkt_seq,
