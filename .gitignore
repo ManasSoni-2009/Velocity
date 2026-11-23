@@ -1,0 +1,31 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Native build outputs (.so built via cargo-ndk)
+native/jniLibs/
+*.so
+
+# Gradle & Android
+.gradle/
+build/
+**/build/
+local.properties
+*.jks
+*.keystore
+*.apk
+*.aab
+*.ap_
+.cxx/
+captures/
+
+# IDE & OS
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+*.log

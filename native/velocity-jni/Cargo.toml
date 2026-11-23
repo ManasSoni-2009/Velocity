@@ -1,0 +1,20 @@
+[package]
+name = "velocity-jni"
+version = "0.1.0"
+edition = "2021"
+authors = ["Velocity Team"]
+description = "JNI bridge binding Velocity multipath core to Android and JVM"
+
+[lib]
+name = "velocity_jni"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+velocity-core = { path = "../velocity-core" }
+velocity-proto = { path = "../velocity-proto" }
+jni = { version = "0.21", default-features = false }
+tokio = { version = "1.36", features = ["full"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+parking_lot = "0.12"

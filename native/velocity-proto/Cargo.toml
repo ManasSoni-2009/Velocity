@@ -1,0 +1,20 @@
+[package]
+name = "velocity-proto"
+version = "0.1.0"
+edition = "2021"
+authors = ["Velocity Team"]
+description = "Clean-room multipath bonding protocol VL01 binary framing, AEAD encryption, and buffer pool"
+
+[dependencies]
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+bytes = "1.5"
+parking_lot = "0.12"
+crossbeam-channel = "0.5"
+thiserror = "1.0"
+byteorder = "1.5"
+rand = "0.8"
+
+[dev-dependencies]
+rand = "0.8"

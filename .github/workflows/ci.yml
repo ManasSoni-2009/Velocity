@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-workspace:
+    name: Rust Workspace Tests & Relay Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            native -> native/target
+            server -> server/target
+
+      - name: Run Rust workspace unit & integration tests
+        run: |
+          if [ -d "native" ]; then
+            cargo test --manifest-path native/Cargo.toml --all-targets --all-features
+          fi
+          if [ -d "server" ]; then
+            cargo test --manifest-path server/Cargo.toml --all-targets --all-features
+          fi
+
+      - name: Build velocity-relay binary (Linux x86_64)
+        run: |
+          if [ -d "server" ]; then
+            cargo build --release --manifest-path server/Cargo.toml --bin velocity-relay
+          fi
+
+  android-and-kmp:
+    name: Android JNI, KMP Tests & App Builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK & NDK
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 11076708
+
+      - name: Install Android NDK & Build-Tools
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+
+      - name: Install Rust toolchain with Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, armv7-linux-androideabi, x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Build Android JNI libraries (.so)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: |
+          if [ -f "native/Cargo.toml" ]; then
+            mkdir -p composeApp/src/androidMain/jniLibs
+            cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
+              -o composeApp/src/androidMain/jniLibs \
+              build --release --manifest-path native/Cargo.toml -p velocity-jni
+          fi
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Run KMP & Android Unit Tests
+        run: |
+          chmod +x gradlew || true
+          ./gradlew :composeApp:testDebugUnitTest :composeApp:desktopTest --stacktrace
+
+      - name: Assemble Android APK
+        run: |
+          ./gradlew :composeApp:assembleDebug :composeApp:assembleRelease --stacktrace
+
+      - name: Package Desktop App (UberJar)
+        run: |
+          ./gradlew :composeApp:packageUberJarForCurrentOS --stacktrace
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: velocity-android-apks
+          path: composeApp/build/outputs/apk/**/*.apk
+
+      - name: Upload Desktop App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: velocity-desktop-package
+          path: composeApp/build/compose/jars/*.jar
