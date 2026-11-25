@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/hero-banner.svg" alt="Velocity — Multipath Network Bonding & Self-Hosted Relay" width="100%" />
+<img src="docs/assets/hero-banner.webp" alt="Velocity — Multipath Network Bonding & Self-Hosted Relay" width="100%" />
 
 <br />
 
@@ -11,7 +11,7 @@
 
 <br />
 
-<img src="docs/assets/palette-strip.svg" alt="Obsidian-Violet & Frost Lilac Design Palette" width="760" />
+<img src="docs/assets/palette-strip.png" alt="Obsidian-Violet & Frost Lilac Design Palette" width="760" />
 
 </div>
 
@@ -73,7 +73,7 @@ Most VPNs and mobile devices force you onto **either** Wi-Fi **or** Cellular—l
 ## How Multipath Bonding Works
 
 <div align="center">
-  <img src="docs/assets/bonding-flow.svg" alt="Animated VL01 Multipath Architecture Flow" width="100%" />
+  <img src="docs/assets/bonding-flow.webp" alt="Animated VL01 Multipath Architecture Flow" width="100%" />
 </div>
 
 | Mode | In App | Under the Hood |
