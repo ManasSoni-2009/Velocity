@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/hero-banner.webp" alt="Velocity — Multipath Network Bonding & Self-Hosted Relay" width="100%" />
+<img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/assets/hero-banner.webp" alt="Velocity — Multipath Network Bonding & Self-Hosted Relay" width="100%" />
 
 <br />
 
@@ -8,10 +8,15 @@
 [![Kotlin Multiplatform](https://img.shields.io/badge/UI-Compose_Multiplatform-A473C3?style=for-the-badge&logo=kotlin&logoColor=140E20&labelColor=140E20)](composeApp/)
 [![Encryption](https://img.shields.io/badge/AEAD-ChaCha20--Poly1305-6C3C91?style=for-the-badge&labelColor=140E20)](native/velocity-proto/)
 [![Relay](https://img.shields.io/badge/Relay-Self--Hosted_Linux-3D2556?style=for-the-badge&logo=linux&logoColor=F5EDFA&labelColor=140E20)](server/)
+[![Latest Release](https://img.shields.io/badge/Release-v2.0.0_APK-6C3C91?style=for-the-badge&logo=android&logoColor=F5EDFA&labelColor=140E20)](https://github.com/ManasSoni-2009/Velocity/releases/latest)
 
 <br />
 
-<img src="docs/assets/palette-strip.png" alt="Obsidian-Violet & Frost Lilac Design Palette" width="760" />
+<img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/assets/palette-strip.png" alt="Obsidian-Violet & Frost Lilac Design Palette" width="760" />
+
+<br /><br />
+
+**[Download Latest APK (`v2.0.0`)](https://github.com/ManasSoni-2009/Velocity/releases/tag/v2.0.0)** · **[Self-Host Setup](#-set-up-your-own-relay-server)** · **[Local Dev Loop](#-local-build-test--phone-deploy-loop)**
 
 </div>
 
@@ -37,19 +42,19 @@ Most VPNs and mobile devices force you onto **either** Wi-Fi **or** Cellular—l
       <strong>Obsidian (Dark Mode)</strong><br />
       <sub>Restrained `#140E20` canvas · `#6C3C91` hero orb</sub>
       <br /><br />
-      <img src="docs/screenshots/05_bond_indigo_dark.png" width="240" alt="Velocity Bond Screen in Obsidian Dark Mode" />
+      <img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/screenshots/05_bond_indigo_dark.png" width="240" alt="Velocity Bond Screen in Obsidian Dark Mode" />
     </td>
     <td align="center" width="33%">
       <strong>Frost Lilac (Light Mode)</strong><br />
       <sub>Active Wi-Fi + 5G throughput &amp; quota bar</sub>
       <br /><br />
-      <img src="docs/screenshots/01_bond_cream_bonded.png" width="240" alt="Velocity Bond Screen in Frost Lilac Mode" />
+      <img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/screenshots/01_bond_cream_bonded.png" width="240" alt="Velocity Bond Screen in Frost Lilac Mode" />
     </td>
     <td align="center" width="33%">
       <strong>Smart No-Internet Guard</strong><br />
       <sub>Detects broken Wi-Fi &amp; isolates over 5G</sub>
       <br /><br />
-      <img src="docs/screenshots/02_bond_cream_wifi_no_internet.png" width="240" alt="Velocity detecting Wi-Fi without internet" />
+      <img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/screenshots/02_bond_cream_wifi_no_internet.png" width="240" alt="Velocity detecting Wi-Fi without internet" />
     </td>
   </tr>
   <tr>
@@ -57,13 +62,13 @@ Most VPNs and mobile devices force you onto **either** Wi-Fi **or** Cellular—l
       <strong>Self-Hosted Relays</strong><br />
       <sub>Paste `velocity://` links, ping live RTT, inspect egress quota</sub>
       <br /><br />
-      <img src="docs/screenshots/03_relays_cream.png" width="240" alt="Velocity Relays Tab" />
+      <img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/screenshots/03_relays_cream.png" width="240" alt="Velocity Relays Tab" />
     </td>
     <td align="center" width="50%" colspan="2">
       <strong>Settings &amp; Liquid Glass Dock</strong><br />
       <sub>Optical `#container-glass` navbar refracting cards underneath</sub>
       <br /><br />
-      <img src="docs/screenshots/04_settings_cream.png" width="240" alt="Velocity Settings Tab with floating Liquid Glass navbar" />
+      <img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/screenshots/04_settings_cream.png" width="240" alt="Velocity Settings Tab with floating Liquid Glass navbar" />
     </td>
   </tr>
 </table>
@@ -73,7 +78,7 @@ Most VPNs and mobile devices force you onto **either** Wi-Fi **or** Cellular—l
 ## How Multipath Bonding Works
 
 <div align="center">
-  <img src="docs/assets/bonding-flow.webp" alt="Animated VL01 Multipath Architecture Flow" width="100%" />
+  <img src="https://cdn.jsdelivr.net/gh/ManasSoni-2009/Velocity@56500d7/docs/assets/bonding-flow.webp" alt="Animated VL01 Multipath Architecture Flow" width="100%" />
 </div>
 
 | Mode | In App | Under the Hood |
