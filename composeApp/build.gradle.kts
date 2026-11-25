@@ -148,6 +148,10 @@ android {
     }
 }
 
+compose.resources {
+    packageOfResClass = "com.velocity.app.resources"
+}
+
 compose.desktop {
     application {
         mainClass = "com.velocity.app.MainKt"

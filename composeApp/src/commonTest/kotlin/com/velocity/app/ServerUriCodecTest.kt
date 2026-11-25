@@ -102,8 +102,13 @@ class ServerUriCodecTest {
         val snippet = ServerUriCodec.dockerSnippet(profile)
         assertTrue(snippet.contains("--cap-add=NET_ADMIN"))
         assertTrue(snippet.contains("-p 51820:51820/udp"))
-        assertTrue(snippet.contains("VELOCITY_PSK=abcdef0123456789abcdef0123456789"))
+        assertTrue(snippet.contains("PSK=abcdef0123456789abcdef0123456789"))
+        assertTrue(snippet.contains("MONTHLY_LIMIT_GB=10240"))
         assertTrue(snippet.contains("velocity-relay:latest"))
+
+        val oci = ServerUriCodec.oracleCloudSnippet(profile)
+        assertTrue(oci.contains("MONTHLY_LIMIT_GB=10240"))
+        assertTrue(oci.contains("install-oci.sh"))
     }
 
     @Test

@@ -12,48 +12,103 @@ import com.velocity.app.domain.ThemeMode
 
 data class VelocityA11ySettings(
     val reduceTransparency: Boolean = false,
+    val reduceMotion: Boolean = false,
     val highContrast: Boolean = false,
+)
+
+data class VelocitySemanticColors(
+    val canvas: Color,
+    val card: Color,
+    val cardBorder: Color,
+    val mutedSurface: Color,
+    val primaryInk: Color,
+    val secondaryInk: Color,
+    val accent: Color,
+    val highlight: Color,
+    val onAccent: Color,
+    val successInk: Color,
+    val successBg: Color,
+    val warningInk: Color,
+    val warningBg: Color,
+    val errorInk: Color,
+    val errorBg: Color,
+    val wifiTint: Color,
+    val wifiBg: Color,
+    val cellTint: Color,
+    val cellBg: Color,
 )
 
 val LocalVelocityA11y = staticCompositionLocalOf { VelocityA11ySettings() }
 val LocalIsDarkTheme = staticCompositionLocalOf { true }
+val LocalVelocitySemantic = staticCompositionLocalOf {
+    VelocitySemanticColors(
+        canvas = VelocityColors.ObsidianVoid,
+        card = VelocityColors.RoyalPlum,
+        cardBorder = VelocityColors.ObsidianBorder,
+        mutedSurface = VelocityColors.ObsidianSurfaceSubtle,
+        primaryInk = VelocityColors.FrostLilac,
+        secondaryInk = VelocityColors.ObsidianInkMuted,
+        accent = VelocityColors.ImperialViolet,
+        highlight = VelocityColors.LuminousLavender,
+        onAccent = VelocityColors.FrostLilac,
+        successInk = VelocityColors.SuccessDark,
+        successBg = VelocityColors.SuccessContainerDark,
+        warningInk = VelocityColors.WarningDark,
+        warningBg = VelocityColors.WarningContainerDark,
+        errorInk = VelocityColors.ErrorDark,
+        errorBg = VelocityColors.ErrorContainerDark,
+        wifiTint = VelocityColors.WifiAccentDark,
+        wifiBg = VelocityColors.WifiSurfaceDark,
+        cellTint = VelocityColors.CellAccentDark,
+        cellBg = VelocityColors.CellSurfaceDark,
+    )
+}
 
-private val DarkColorScheme = darkColorScheme(
-    primary = VelocityColors.CyanGlow,
-    onPrimary = Color.Black,
-    primaryContainer = VelocityColors.ElectricBlue,
-    onPrimaryContainer = Color.White,
-    secondary = VelocityColors.VioletAccent,
-    onSecondary = Color.White,
-    background = VelocityColors.DarkCanvas,
-    onBackground = Color.White,
-    surface = VelocityColors.DarkContentCard,
-    onSurface = Color.White,
-    surfaceVariant = VelocityColors.DarkCanvasElevated,
-    onSurfaceVariant = Color(0xFF94A3B8),
-    outline = VelocityColors.DarkContentCardBorder,
+private val LilacLightColorScheme = lightColorScheme(
+    primary = VelocityColors.ImperialViolet,
+    onPrimary = VelocityColors.FrostLilac,
+    primaryContainer = VelocityColors.LuminousLavender,
+    onPrimaryContainer = VelocityColors.ObsidianVoid,
+    secondary = VelocityColors.VelvetAmethyst,
+    onSecondary = VelocityColors.FrostLilac,
+    tertiary = VelocityColors.LuminousLavender,
+    onTertiary = VelocityColors.ObsidianVoid,
+    background = VelocityColors.FrostLilac,
+    onBackground = VelocityColors.ObsidianVoid,
+    surface = VelocityColors.LilacElevated,
+    onSurface = VelocityColors.ObsidianVoid,
+    surfaceVariant = VelocityColors.LilacMuted,
+    onSurfaceVariant = VelocityColors.LilacInkMuted,
+    outline = VelocityColors.LilacBorder,
+    error = VelocityColors.ErrorLight,
+    onError = Color.White,
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = VelocityColors.ElectricBlue,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFE0F2FE),
-    onPrimaryContainer = VelocityColors.DeepBlue,
-    secondary = VelocityColors.VioletAccent,
-    onSecondary = Color.White,
-    background = VelocityColors.LightCanvas,
-    onBackground = Color(0xFF0F172A),
-    surface = VelocityColors.LightContentCard,
-    onSurface = Color(0xFF0F172A),
-    surfaceVariant = VelocityColors.LightCanvasElevated,
-    onSurfaceVariant = Color(0xFF64748B),
-    outline = VelocityColors.LightContentCardBorder,
+private val ObsidianDarkColorScheme = darkColorScheme(
+    primary = VelocityColors.ImperialViolet,
+    onPrimary = VelocityColors.FrostLilac,
+    primaryContainer = VelocityColors.VelvetAmethyst,
+    onPrimaryContainer = VelocityColors.FrostLilac,
+    secondary = VelocityColors.LuminousLavender,
+    onSecondary = VelocityColors.ObsidianVoid,
+    tertiary = VelocityColors.FrostLilac,
+    onTertiary = VelocityColors.ObsidianVoid,
+    background = VelocityColors.ObsidianVoid,
+    onBackground = VelocityColors.FrostLilac,
+    surface = VelocityColors.RoyalPlum,
+    onSurface = VelocityColors.FrostLilac,
+    surfaceVariant = VelocityColors.ObsidianSurfaceSubtle,
+    onSurfaceVariant = VelocityColors.ObsidianInkMuted,
+    outline = VelocityColors.ObsidianBorder,
+    error = VelocityColors.ErrorDark,
+    onError = VelocityColors.ObsidianVoid,
 )
 
 @Composable
 fun VelocityTheme(
-    themeMode: ThemeMode = ThemeMode.DARK,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     reduceTransparency: Boolean = false,
+    reduceMotion: Boolean = false,
     highContrast: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -63,19 +118,68 @@ fun VelocityTheme(
         ThemeMode.LIGHT -> false
     }
 
-    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+    val colorScheme = if (isDark) ObsidianDarkColorScheme else LilacLightColorScheme
+    val semantic = if (isDark) {
+        VelocitySemanticColors(
+            canvas = VelocityColors.ObsidianVoid,
+            card = VelocityColors.RoyalPlum,
+            cardBorder = if (highContrast) VelocityColors.FrostLilac.copy(alpha = 0.55f) else VelocityColors.ObsidianBorder,
+            mutedSurface = VelocityColors.ObsidianSurfaceSubtle,
+            primaryInk = VelocityColors.FrostLilac,
+            secondaryInk = VelocityColors.ObsidianInkMuted,
+            accent = VelocityColors.ImperialViolet,
+            highlight = VelocityColors.LuminousLavender,
+            onAccent = VelocityColors.FrostLilac,
+            successInk = VelocityColors.SuccessDark,
+            successBg = VelocityColors.SuccessContainerDark,
+            warningInk = VelocityColors.WarningDark,
+            warningBg = VelocityColors.WarningContainerDark,
+            errorInk = VelocityColors.ErrorDark,
+            errorBg = VelocityColors.ErrorContainerDark,
+            wifiTint = VelocityColors.WifiAccentDark,
+            wifiBg = VelocityColors.WifiSurfaceDark,
+            cellTint = VelocityColors.CellAccentDark,
+            cellBg = VelocityColors.CellSurfaceDark,
+        )
+    } else {
+        VelocitySemanticColors(
+            canvas = VelocityColors.FrostLilac,
+            card = VelocityColors.LilacElevated,
+            cardBorder = if (highContrast) VelocityColors.ImperialViolet.copy(alpha = 0.55f) else VelocityColors.LilacBorder,
+            mutedSurface = VelocityColors.LilacMuted,
+            primaryInk = VelocityColors.ObsidianVoid,
+            secondaryInk = VelocityColors.LilacInkMuted,
+            accent = VelocityColors.ImperialViolet,
+            highlight = VelocityColors.ImperialViolet,
+            onAccent = VelocityColors.FrostLilac,
+            successInk = VelocityColors.SuccessLight,
+            successBg = VelocityColors.SuccessContainerLight,
+            warningInk = VelocityColors.WarningLight,
+            warningBg = VelocityColors.WarningContainerLight,
+            errorInk = VelocityColors.ErrorLight,
+            errorBg = VelocityColors.ErrorContainerLight,
+            wifiTint = VelocityColors.WifiAccentLight,
+            wifiBg = VelocityColors.WifiSurfaceLight,
+            cellTint = VelocityColors.CellAccentLight,
+            cellBg = VelocityColors.CellSurfaceLight,
+        )
+    }
+
     val a11y = VelocityA11ySettings(
         reduceTransparency = reduceTransparency,
+        reduceMotion = reduceMotion,
         highContrast = highContrast,
     )
+    val typography = rememberVelocityTypography()
 
     CompositionLocalProvider(
         LocalVelocityA11y provides a11y,
         LocalIsDarkTheme provides isDark,
+        LocalVelocitySemantic provides semantic,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = VelocityTypography,
+            typography = typography,
             content = content,
         )
     }

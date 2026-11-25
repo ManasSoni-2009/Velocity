@@ -5,40 +5,45 @@ import com.velocity.app.platform.DesktopPlatformBridge
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class DesktopRenderTest {
 
+    private val testServer = ServerProfile(
+        id = "srv-local",
+        name = "Local Test Relay",
+        host = "127.0.0.1",
+        port = 51820,
+        pskHex = "0123456789abcdef0123456789abcdef",
+        region = "Local",
+    )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun testDesktopBridgeLifecycleAndSpeedTest() = runTest {
-        val bridge = DesktopPlatformBridge()
-        val server = defaultServers.first()
+        val bridge = DesktopPlatformBridge(persistToDisk = false)
 
-        // 1. Initial State
         assertEquals(ConnectionState.DISCONNECTED, bridge.connectionStateFlow.value.state)
+        assertTrue(bridge.networkHealthFlow.value.hasAnyInternet)
 
-        // 2. Connect
         val connectRes = bridge.connect(
-            server = server,
+            server = testServer,
             mode = BondingMode.SPEED,
             settings = VelocitySettings(),
             appRules = emptyList(),
         )
         assertTrue(connectRes.isSuccess)
         assertEquals(ConnectionState.BONDED, bridge.connectionStateFlow.value.state)
-        assertEquals(server.id, bridge.connectionStateFlow.value.activeServerId)
+        assertEquals(testServer.id, bridge.connectionStateFlow.value.activeServerId)
 
-        // 3. Switch mode
         val modeRes = bridge.setMode(BondingMode.LOW_LATENCY)
         assertTrue(modeRes.isSuccess)
         assertEquals(BondingMode.LOW_LATENCY, bridge.connectionStateFlow.value.activeMode)
 
-        // 4. Run Speed Test
         var progressCalled = false
-        val speedTestRes = bridge.runSpeedTest(server) { phase, fraction, mbps ->
+        val speedTestRes = bridge.runSpeedTest(testServer) { _, fraction, _ ->
             progressCalled = true
             assertTrue(fraction in 0f..1f)
         }
@@ -48,59 +53,31 @@ class DesktopRenderTest {
         assertTrue(result.combinedDownloadMbps > result.wifiDownloadMbps)
         assertTrue(result.gainPercent > 0)
 
-        // 5. Probe Servers
-        val probeRes = bridge.probeServers(defaultServers)
-        assertEquals(defaultServers.size, probeRes.size)
-        assertTrue(probeRes.all { it.reachable })
+        val probeRes = bridge.probeServers(listOf(testServer))
+        assertEquals(1, probeRes.size)
+        assertTrue(probeRes.first().reachable)
 
-        // 6. Disconnect
         val disconnectRes = bridge.disconnect()
         assertTrue(disconnectRes.isSuccess)
         assertEquals(ConnectionState.DISCONNECTED, bridge.connectionStateFlow.value.state)
     }
 
     @Test
-    fun testDesktopInstalledApps() = runTest {
-        val bridge = DesktopPlatformBridge()
-        val apps = bridge.getInstalledApps()
-        assertTrue(apps.isNotEmpty())
-        assertTrue(apps.any { it.appName == "YouTube" })
-    }
-
-    @Test
-    fun testDesktopClipboardCopy() {
-        val bridge = DesktopPlatformBridge()
-        // Should execute without throwing security or platform exceptions
-        bridge.copyToClipboard("Test", "velocity://test")
-    }
-
-    @Test
-    fun testDefaultServersProfileIntegrity() {
-        assertEquals(4, defaultServers.size)
-        for (server in defaultServers) {
-            assertTrue(server.host.isNotBlank())
-            assertTrue(server.port in 1..65535)
-            assertTrue(server.pskHex.length >= 16)
-            assertNotNull(server.region)
-        }
-    }
-
-    @Test
     fun testDesktopScreenshotHelperExecution() {
-        val screenshotsDir = java.io.File("docs/screenshots")
+        val screenshotsDir = File("docs/screenshots")
         val capturedMap = DesktopScreenshotHelper.captureAllTabs(screenshotsDir)
-        assertEquals(4, capturedMap.size)
-        assertTrue(java.io.File(screenshotsDir, "01_bond_tab.png").exists())
-        assertTrue(java.io.File(screenshotsDir, "02_telemetry_tab.png").exists())
-        assertTrue(java.io.File(screenshotsDir, "03_servers_tab.png").exists())
-        assertTrue(java.io.File(screenshotsDir, "04_settings_tab.png").exists())
+        assertEquals(5, capturedMap.size)
+        assertTrue(File(screenshotsDir, "01_bond_cream_bonded.png").exists())
+        assertTrue(File(screenshotsDir, "02_bond_cream_wifi_no_internet.png").exists())
+        assertTrue(File(screenshotsDir, "03_relays_cream.png").exists())
+        assertTrue(File(screenshotsDir, "04_settings_cream.png").exists())
+        assertTrue(File(screenshotsDir, "05_bond_indigo_dark.png").exists())
 
-        // Mirror to root docs/screenshots if running inside composeApp
-        val rootDir = java.io.File("../docs/screenshots")
+        val rootDir = File("../docs/screenshots")
         try {
             rootDir.mkdirs()
             screenshotsDir.listFiles()?.forEach { file ->
-                file.copyTo(java.io.File(rootDir, file.name), overwrite = true)
+                file.copyTo(File(rootDir, file.name), overwrite = true)
             }
         } catch (_: Throwable) {}
     }

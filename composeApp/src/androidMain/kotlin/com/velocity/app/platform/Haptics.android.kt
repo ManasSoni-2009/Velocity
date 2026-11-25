@@ -1,0 +1,31 @@
+package com.velocity.app.platform
+
+import android.os.Build
+import android.view.HapticFeedbackConstants
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalView
+
+@Composable
+actual fun rememberHapticPerformer(): (VelocityHaptic) -> Unit {
+    val view = LocalView.current
+    return remember(view) {
+        { type ->
+            val constant = when (type) {
+                VelocityHaptic.TAP -> HapticFeedbackConstants.CONTEXT_CLICK
+                VelocityHaptic.CONFIRM -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    HapticFeedbackConstants.CONFIRM
+                } else {
+                    HapticFeedbackConstants.CONTEXT_CLICK
+                }
+                VelocityHaptic.REJECT -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    HapticFeedbackConstants.REJECT
+                } else {
+                    HapticFeedbackConstants.LONG_PRESS
+                }
+                VelocityHaptic.TICK -> HapticFeedbackConstants.CLOCK_TICK
+            }
+            view.performHapticFeedback(constant)
+        }
+    }
+}

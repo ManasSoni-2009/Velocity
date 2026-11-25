@@ -60,10 +60,31 @@ object VelocityJni {
     external fun nativeSetMode(handle: Long, mode: Int)
 
     @JvmStatic
+    external fun nativeUpdateConfig(
+        handle: Long,
+        wifiBiasPercent: Int,
+        fecEnabled: Boolean,
+    )
+
+    @JvmStatic
     external fun nativeGetTelemetryJson(handle: Long): String
 
     @JvmStatic
+    external fun nativeProbeServerJson(
+        configJson: String,
+        pathId: Int,
+        socketFd: Int,
+    ): String
+
+    @JvmStatic
     external fun nativeRunSpeedTestJson(configJson: String): String
+
+    @JvmStatic
+    external fun nativeRunMultipathSpeedTestJson(
+        configJson: String,
+        wifiFd: Int,
+        cellFd: Int,
+    ): String
 
     @JvmStatic
     external fun nativeStopTunnel(handle: Long)

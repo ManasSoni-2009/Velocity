@@ -8,13 +8,13 @@ import com.velocity.app.platform.DesktopPlatformBridge
 
 fun main() = application {
     val windowState = rememberWindowState(
-        width = 440.dp,
-        height = 880.dp,
+        width = 430.dp,
+        height = 900.dp,
     )
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "Velocity - Multipath Bonding Engine",
+        title = "Velocity",
         state = windowState,
     ) {
         val bridge = rememberDesktopBridge()
@@ -25,5 +25,5 @@ fun main() = application {
 private var cachedBridge: DesktopPlatformBridge? = null
 
 private fun rememberDesktopBridge(): DesktopPlatformBridge {
-    return cachedBridge ?: DesktopPlatformBridge().also { cachedBridge = it }
+    return cachedBridge ?: DesktopPlatformBridge(persistToDisk = true).also { cachedBridge = it }
 }

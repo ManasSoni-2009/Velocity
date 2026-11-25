@@ -13,86 +13,83 @@ import kotlinx.coroutines.launch
 data class BondingUiState(
     val currentTab: VelocityTab = VelocityTab.BOND,
     val connectionStatus: ConnectionStatus = ConnectionStatus(),
+    val networkHealth: NetworkHealthSnapshot = NetworkHealthSnapshot(),
     val telemetry: CombinedTelemetry = CombinedTelemetry(),
     val telemetryHistory: List<TelemetrySample> = emptyList(),
-    val servers: List<ServerProfile> = defaultServers,
-    val selectedServerId: String = defaultServers.first().id,
+    val servers: List<ServerProfile> = emptyList(),
+    val selectedServerId: String? = null,
     val settings: VelocitySettings = VelocitySettings(),
     val appRules: List<AppTunnelRule> = emptyList(),
     val speedTest: SpeedTestProgress = SpeedTestProgress(),
     val isProbingServers: Boolean = false,
     val importError: String? = null,
     val showImportDialog: Boolean = false,
+    val showSelfHostSheet: Boolean = false,
     val bannerMessage: String? = null,
 ) {
-    val selectedServer: ServerProfile
-        get() = servers.firstOrNull { it.id == selectedServerId } ?: servers.first()
+    val selectedServer: ServerProfile?
+        get() = servers.firstOrNull { it.id == selectedServerId } ?: servers.firstOrNull()
 }
 
-val defaultServers = listOf(
-    ServerProfile(
-        id = "srv-us-east",
-        name = "US East (Ashburn)",
-        host = "useast.relay.velocity-multipath.net",
-        port = 51820,
-        pskHex = "a1b2c3d4e5f67890123456789abcdef0",
-        region = "US East",
-        wifiRttMs = 18,
-        cellularRttMs = 38,
-        isReachable = true,
-    ),
-    ServerProfile(
-        id = "srv-eu-central",
-        name = "EU Central (Frankfurt)",
-        host = "eucentral.relay.velocity-multipath.net",
-        port = 51820,
-        pskHex = "b2c3d4e5f67890123456789abcdef01a",
-        region = "EU Central",
-        wifiRttMs = 28,
-        cellularRttMs = 46,
-        isReachable = true,
-    ),
-    ServerProfile(
-        id = "srv-ap-southeast",
-        name = "AP Southeast (Singapore)",
-        host = "apsoutheast.relay.velocity-multipath.net",
-        port = 51820,
-        pskHex = "c3d4e5f67890123456789abcdef01a2b",
-        region = "AP East",
-        wifiRttMs = 42,
-        cellularRttMs = 64,
-        isReachable = true,
-    ),
-    ServerProfile(
-        id = "srv-local-docker",
-        name = "Self-Hosted Local Relay",
-        host = "127.0.0.1",
-        port = 51820,
-        pskHex = "00112233445566778899aabbccddeeff",
-        region = "Local",
-        wifiRttMs = 2,
-        cellularRttMs = 12,
-        isReachable = true,
-        isSelfHosted = true,
-    ),
-)
+val defaultServers: List<ServerProfile> = emptyList()
 
 class BondingViewModel(
     private val bridge: VelocityPlatformBridge,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main),
+    initialServers: List<ServerProfile> = emptyList(),
 ) {
-    private val _uiState = MutableStateFlow(BondingUiState())
+    private val _uiState = MutableStateFlow(
+        BondingUiState(
+            servers = initialServers,
+            selectedServerId = initialServers.firstOrNull()?.id,
+        ),
+    )
     val uiState: StateFlow<BondingUiState> = _uiState.asStateFlow()
 
     private var speedTestJob: Job? = null
     private var telemetryJob: Job? = null
     private var connectionJob: Job? = null
-    private val maxHistorySamples = 60
+    private var networkHealthJob: Job? = null
+    private val maxHistorySamples = 45
 
     init {
         observePlatform()
-        loadInstalledApps()
-        probeAllServers()
+        bootstrapInitialData()
+    }
+
+    private fun bootstrapInitialData() {
+        scope.launch {
+            val persisted = bridge.loadPersistedState()
+            if (persisted != null) {
+                _uiState.update { current ->
+                    val mergedServers = if (persisted.servers.isNotEmpty()) persisted.servers else current.servers
+                    val selectedId = persisted.selectedServerId
+                        ?.takeIf { id -> mergedServers.any { it.id == id } }
+                        ?: mergedServers.firstOrNull()?.id
+                    current.copy(
+                        servers = mergedServers,
+                        selectedServerId = selectedId,
+                        settings = persisted.settings,
+                        connectionStatus = current.connectionStatus.copy(activeMode = persisted.activeMode),
+                    )
+                }
+            }
+
+            val apps = bridge.getInstalledApps()
+            if (apps.isNotEmpty()) {
+                val savedPolicies = persisted?.appRulePolicies ?: emptyMap()
+                val mergedApps = apps.map { app ->
+                    val saved = savedPolicies[app.packageName]
+                    if (saved != null) app.copy(policy = saved) else app
+                }
+                _uiState.update { it.copy(appRules = mergedApps) }
+            }
+
+            bridge.refreshNetworkHealth()
+            if (_uiState.value.servers.isNotEmpty()) {
+                probeAllServers()
+            }
+        }
     }
 
     private fun observePlatform() {
@@ -113,9 +110,20 @@ class BondingViewModel(
                     val history = (current.telemetryHistory + sample)
                         .takeLast(maxHistorySamples)
 
+                    val liveQuota = tel.relayQuota
+                    val activeId = current.selectedServerId
+                    val updatedServers = if (liveQuota != null && activeId != null) {
+                        current.servers.map { srv ->
+                            if (srv.id == activeId && srv.quota != liveQuota) srv.copy(quota = liveQuota) else srv
+                        }
+                    } else {
+                        current.servers
+                    }
+
                     current.copy(
                         telemetry = tel,
                         telemetryHistory = history,
+                        servers = updatedServers,
                     )
                 }
             }
@@ -126,27 +134,68 @@ class BondingViewModel(
                 _uiState.update { it.copy(connectionStatus = status) }
             }
         }
+
+        networkHealthJob = scope.launch {
+            bridge.networkHealthFlow.collect { health ->
+                _uiState.update { it.copy(networkHealth = health) }
+            }
+        }
     }
 
     fun selectTab(tab: VelocityTab) {
         _uiState.update { it.copy(currentTab = tab) }
     }
 
+    fun refreshNetworkHealth() {
+        scope.launch {
+            bridge.refreshNetworkHealth()
+        }
+    }
+
     fun toggleConnect() {
         val state = _uiState.value
-        val isConnected = state.connectionStatus.state.isActiveOrTransitioning
+        val isActive = state.connectionStatus.state.isActiveOrTransitioning
 
         scope.launch {
-            if (isConnected) {
+            if (isActive) {
                 bridge.disconnect()
-            } else {
-                val server = state.selectedServer
-                bridge.connect(
-                    server = server,
-                    mode = state.connectionStatus.activeMode,
-                    settings = state.settings,
-                    appRules = state.appRules,
-                )
+                return@launch
+            }
+
+            val server = state.selectedServer
+            if (server == null) {
+                _uiState.update {
+                    it.copy(
+                        currentTab = VelocityTab.RELAYS,
+                        showImportDialog = true,
+                        bannerMessage = "Add a relay server to start bonding",
+                    )
+                }
+                return@launch
+            }
+
+            bridge.refreshNetworkHealth()
+            val latestHealth = bridge.networkHealthFlow.value
+            if (!latestHealth.hasAnyInternet) {
+                _uiState.update {
+                    it.copy(
+                        bannerMessage = latestHealth.advisoryMessage
+                            ?: "No internet connection available on Wi-Fi or Cellular",
+                    )
+                }
+                return@launch
+            }
+
+            val result = bridge.connect(
+                server = server,
+                mode = state.connectionStatus.activeMode,
+                settings = state.settings,
+                appRules = state.appRules,
+            )
+            result.onFailure { err ->
+                _uiState.update {
+                    it.copy(bannerMessage = err.message ?: "Unable to start tunnel")
+                }
             }
         }
     }
@@ -159,14 +208,16 @@ class BondingViewModel(
                     connectionStatus = current.connectionStatus.copy(activeMode = mode),
                 )
             }
+            persistCurrentState()
         }
     }
 
     fun selectServer(server: ServerProfile) {
         _uiState.update { it.copy(selectedServerId = server.id) }
+        persistCurrentStateAsync()
+
         val status = _uiState.value.connectionStatus
         if (status.state.isActiveOrTransitioning) {
-            // Reconnect to newly selected server
             scope.launch {
                 bridge.disconnect()
                 bridge.connect(
@@ -179,6 +230,27 @@ class BondingViewModel(
         }
     }
 
+    fun deleteServer(serverId: String) {
+        val current = _uiState.value
+        val remaining = current.servers.filterNot { it.id == serverId }
+        val nextSelected = if (current.selectedServerId == serverId) {
+            remaining.firstOrNull()?.id
+        } else {
+            current.selectedServerId
+        }
+        _uiState.update {
+            it.copy(
+                servers = remaining,
+                selectedServerId = nextSelected,
+                bannerMessage = "Relay removed",
+            )
+        }
+        persistCurrentStateAsync()
+        if (current.connectionStatus.state.isActiveOrTransitioning && current.selectedServerId == serverId) {
+            scope.launch { bridge.disconnect() }
+        }
+    }
+
     fun openImportDialog() {
         _uiState.update { it.copy(showImportDialog = true, importError = null) }
     }
@@ -187,43 +259,105 @@ class BondingViewModel(
         _uiState.update { it.copy(showImportDialog = false, importError = null) }
     }
 
+    fun openSelfHostSheet() {
+        _uiState.update { it.copy(showSelfHostSheet = true) }
+    }
+
+    fun closeSelfHostSheet() {
+        _uiState.update { it.copy(showSelfHostSheet = false) }
+    }
+
     fun importServerUri(rawUri: String): Boolean {
         val parsed = ServerUriCodec.parse(rawUri)
         return parsed.fold(
             onSuccess = { profile ->
-                _uiState.update { current ->
-                    val filtered = current.servers.filterNot { it.id == profile.id }
-                    current.copy(
-                        servers = filtered + profile,
-                        selectedServerId = profile.id,
-                        showImportDialog = false,
-                        importError = null,
-                        bannerMessage = "Imported server: ${profile.name}",
-                    )
-                }
-                probeAllServers()
+                saveOrReplaceServer(profile, "Added relay: ${profile.name}")
                 true
             },
             onFailure = { err ->
                 _uiState.update {
-                    it.copy(importError = err.message ?: "Failed to parse URI")
+                    it.copy(importError = err.message ?: "Invalid velocity:// URI")
                 }
                 false
             },
         )
     }
 
+    fun addManualServer(
+        name: String,
+        host: String,
+        portText: String,
+        psk: String,
+        region: String = "Self-Hosted",
+    ): Boolean {
+        val cleanHost = host.trim()
+        val cleanPsk = psk.trim()
+        val port = portText.trim().toIntOrNull()
+        val error = when {
+            cleanHost.isEmpty() -> "Host or IP address is required"
+            port == null || port !in 1..65535 -> "Port must be between 1 and 65535"
+            cleanPsk.length < 16 -> "Key must be at least 16 characters"
+            else -> null
+        }
+        if (error != null) {
+            _uiState.update { it.copy(importError = error) }
+            return false
+        }
+
+        val cleanName = name.trim().ifEmpty { cleanHost }
+        val profile = ServerProfile(
+            id = "srv-${cleanHost.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')}-$port",
+            name = cleanName,
+            host = cleanHost,
+            port = port!!,
+            pskHex = cleanPsk,
+            region = region.trim().ifEmpty { "Self-Hosted" },
+            mtu = _uiState.value.settings.mtu,
+            isSelfHosted = true,
+        )
+        saveOrReplaceServer(profile, "Added relay: ${profile.name}")
+        return true
+    }
+
+    private fun saveOrReplaceServer(profile: ServerProfile, message: String) {
+        _uiState.update { current ->
+            val filtered = current.servers.filterNot { it.id == profile.id }
+            current.copy(
+                servers = filtered + profile,
+                selectedServerId = profile.id,
+                showImportDialog = false,
+                importError = null,
+                bannerMessage = message,
+            )
+        }
+        persistCurrentStateAsync()
+        probeAllServers()
+    }
+
     fun startSpeedTest() {
         if (_uiState.value.speedTest.isRunning) return
+        val server = _uiState.value.selectedServer
+        if (server == null) {
+            _uiState.update {
+                it.copy(
+                    speedTest = SpeedTestProgress(
+                        isRunning = false,
+                        phase = "Unavailable",
+                        errorMessage = "Add and select a relay server first",
+                    ),
+                )
+            }
+            return
+        }
+
         speedTestJob?.cancel()
         speedTestJob = scope.launch {
-            val server = _uiState.value.selectedServer
             _uiState.update {
                 it.copy(
                     speedTest = SpeedTestProgress(
                         isRunning = true,
-                        phase = "Initializing Dual-Path Test...",
-                        progressFraction = 0.05f,
+                        phase = "Testing your links...",
+                        progressFraction = 0.08f,
                     ),
                 )
             }
@@ -260,9 +394,9 @@ class BondingViewModel(
                         current.copy(
                             speedTest = SpeedTestProgress(
                                 isRunning = false,
-                                phase = "Speed Test Failed",
+                                phase = "Benchmark failed",
                                 progressFraction = 0f,
-                                errorMessage = err.message ?: "Unknown error",
+                                errorMessage = err.message ?: "Relay did not respond",
                             ),
                         )
                     }
@@ -276,6 +410,7 @@ class BondingViewModel(
             if (it.packageName == packageName) it.copy(policy = newPolicy) else it
         }
         _uiState.update { it.copy(appRules = updated) }
+        persistCurrentStateAsync()
         scope.launch {
             bridge.updateSplitTunnelApps(updated)
         }
@@ -284,6 +419,10 @@ class BondingViewModel(
     fun updateSettings(transform: (VelocitySettings) -> VelocitySettings) {
         val newSettings = transform(_uiState.value.settings)
         _uiState.update { it.copy(settings = newSettings) }
+        persistCurrentStateAsync()
+        scope.launch {
+            bridge.updateTuning(newSettings)
+        }
     }
 
     fun clearBanner() {
@@ -292,14 +431,15 @@ class BondingViewModel(
 
     fun copyToClipboard(label: String, text: String) {
         bridge.copyToClipboard(label, text)
-        _uiState.update { it.copy(bannerMessage = "Copied $label to clipboard") }
+        _uiState.update { it.copy(bannerMessage = "Copied $label") }
     }
 
     fun probeAllServers() {
-        if (_uiState.value.isProbingServers) return
+        val serversToProbe = _uiState.value.servers
+        if (serversToProbe.isEmpty() || _uiState.value.isProbingServers) return
         scope.launch {
             _uiState.update { it.copy(isProbingServers = true) }
-            val results = bridge.probeServers(_uiState.value.servers)
+            val results = bridge.probeServers(serversToProbe)
             _uiState.update { current ->
                 val resultMap = results.associateBy { it.serverId }
                 val updatedServers = current.servers.map { srv ->
@@ -309,6 +449,8 @@ class BondingViewModel(
                             wifiRttMs = res.wifiRttMs,
                             cellularRttMs = res.cellularRttMs,
                             isReachable = res.reachable,
+                            lastProbeError = res.error,
+                            quota = res.quota ?: srv.quota,
                         )
                     } else {
                         srv
@@ -319,15 +461,23 @@ class BondingViewModel(
                     isProbingServers = false,
                 )
             }
+            persistCurrentState()
         }
     }
 
-    private fun loadInstalledApps() {
-        scope.launch {
-            val apps = bridge.getInstalledApps()
-            if (apps.isNotEmpty()) {
-                _uiState.update { it.copy(appRules = apps) }
-            }
-        }
+    private fun persistCurrentStateAsync() {
+        scope.launch { persistCurrentState() }
+    }
+
+    private suspend fun persistCurrentState() {
+        val current = _uiState.value
+        val persisted = PersistedVelocityState(
+            servers = current.servers,
+            selectedServerId = current.selectedServerId,
+            settings = current.settings,
+            appRulePolicies = current.appRules.associate { it.packageName to it.policy },
+            activeMode = current.connectionStatus.activeMode,
+        )
+        bridge.savePersistedState(persisted)
     }
 }

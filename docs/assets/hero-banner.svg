@@ -1,0 +1,116 @@
+<svg viewBox="0 0 1200 380" width="100%" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Velocity Multipath Bonding Engine">
+  <defs>
+    <clipPath id="cardClip">
+      <rect x="8" y="8" width="1184" height="364" rx="28" />
+    </clipPath>
+    <linearGradient id="glassRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5EDFA" stop-opacity="0.48" />
+      <stop offset="45%" stop-color="#A473C3" stop-opacity="0.16" />
+      <stop offset="100%" stop-color="#F5EDFA" stop-opacity="0.58" />
+    </linearGradient>
+    <linearGradient id="orbRim" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5EDFA" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#A473C3" stop-opacity="0.6" />
+    </linearGradient>
+    <linearGradient id="pathWifi" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#A473C3" stop-opacity="0.15" />
+      <stop offset="50%" stop-color="#A473C3" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#F5EDFA" stop-opacity="0.2" />
+    </linearGradient>
+    <linearGradient id="pathCell" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6C3C91" stop-opacity="0.2" />
+      <stop offset="50%" stop-color="#34D399" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#F5EDFA" stop-opacity="0.2" />
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Obsidian Card -->
+  <rect x="8" y="8" width="1184" height="364" rx="28" fill="#140E20" />
+
+  <g clip-path="url(#cardClip)">
+    <!-- Subtle architectural grid lines -->
+    <g stroke="#3D2556" stroke-width="1" stroke-opacity="0.32">
+      <line x1="0" y1="96" x2="1200" y2="96" />
+      <line x1="0" y1="190" x2="1200" y2="190" />
+      <line x1="0" y1="284" x2="1200" y2="284" />
+      <line x1="420" y1="0" x2="420" y2="380" />
+      <line x1="860" y1="0" x2="860" y2="380" />
+    </g>
+
+    <!-- Animated Multipath Waveforms right-side -->
+    <path id="wifiTrack" d="M 420 140 C 570 70, 740 200, 1140 135" fill="none" stroke="url(#pathWifi)" stroke-width="2.5" stroke-dasharray="8 8">
+      <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1.8s" repeatCount="indefinite" />
+    </path>
+    <path id="cellTrack" d="M 420 240 C 590 310, 770 185, 1140 245" fill="none" stroke="url(#pathCell)" stroke-width="2.5" stroke-dasharray="8 8">
+      <animate attributeName="stroke-dashoffset" from="32" to="0" dur="2.1s" repeatCount="indefinite" />
+    </path>
+
+    <!-- Traveling Encrypted Packet Orbs -->
+    <circle r="5" fill="#F5EDFA">
+      <animateMotion dur="2.4s" repeatCount="indefinite" path="M 420 140 C 570 70, 740 200, 1140 135" />
+    </circle>
+    <circle r="4" fill="#A473C3">
+      <animateMotion dur="2.4s" begin="1.2s" repeatCount="indefinite" path="M 420 140 C 570 70, 740 200, 1140 135" />
+    </circle>
+    <circle r="5" fill="#34D399">
+      <animateMotion dur="2.8s" repeatCount="indefinite" path="M 420 240 C 590 310, 770 185, 1140 245" />
+    </circle>
+    <circle r="4" fill="#F5EDFA">
+      <animateMotion dur="2.8s" begin="1.4s" repeatCount="indefinite" path="M 420 240 C 590 310, 770 185, 1140 245" />
+    </circle>
+
+    <!-- Animated Hero SilkOrb Emblem (Left) -->
+    <g transform="translate(215, 190)">
+      <!-- Sonar Pulse 1 -->
+      <circle cx="0" cy="0" r="82" fill="none" stroke="#A473C3" stroke-width="2">
+        <animate attributeName="r" values="82;134" dur="2.6s" repeatCount="indefinite" />
+        <animate attributeName="stroke-opacity" values="0.72;0" dur="2.6s" repeatCount="indefinite" />
+      </circle>
+      <!-- Sonar Pulse 2 staggered -->
+      <circle cx="0" cy="0" r="82" fill="none" stroke="#F5EDFA" stroke-width="1.5">
+        <animate attributeName="r" values="82;134" dur="2.6s" begin="1.3s" repeatCount="indefinite" />
+        <animate attributeName="stroke-opacity" values="0.45;0" dur="2.6s" begin="1.3s" repeatCount="indefinite" />
+      </circle>
+      <!-- Rotating orbital dash ring -->
+      <circle cx="0" cy="0" r="98" fill="none" stroke="#A473C3" stroke-width="2" stroke-dasharray="48 160" stroke-linecap="round">
+        <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="6s" repeatCount="indefinite" />
+      </circle>
+      <!-- Solid Imperial Violet Core -->
+      <circle cx="0" cy="0" r="82" fill="#6C3C91" stroke="url(#orbRim)" stroke-width="2.5">
+        <animate attributeName="r" values="81;84;81" dur="3.2s" repeatCount="indefinite" />
+      </circle>
+      <!-- Crisp Lightning Glyph -->
+      <path d="M 4 -28 L -18 4 L -2 4 L -6 28 L 18 -4 L 2 -4 Z" fill="#F5EDFA" />
+    </g>
+
+    <!-- Typography & Status Pills -->
+    <g transform="translate(455, 132)">
+      <rect x="0" y="-44" width="218" height="30" rx="15" fill="#241738" stroke="#3D2556" stroke-width="1" />
+      <circle cx="18" cy="-29" r="4.5" fill="#34D399">
+        <animate attributeName="opacity" values="1;0.35;1" dur="1.8s" repeatCount="indefinite" />
+      </circle>
+      <text x="32" y="-24" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#F5EDFA">VL01 · WI-FI + 5G BONDED</text>
+
+      <text x="0" y="34" font-family="Outfit, Inter, Segoe UI, system-ui, sans-serif" font-size="64" font-weight="700" letter-spacing="-1.5" fill="#F5EDFA">Velocity</text>
+      <text x="2" y="72" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="20" font-weight="500" fill="#F5EDFA" fill-opacity="0.72">Combine Wi-Fi + Cellular. Zero-jitter failover. Private relay.</text>
+
+      <!-- Tech Pill Strip -->
+      <g transform="translate(0, 102)">
+        <rect x="0" y="0" width="132" height="34" rx="17" fill="#241738" stroke="#3D2556" stroke-width="1" />
+        <text x="66" y="22" text-anchor="middle" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#A473C3">Rust Engine</text>
+
+        <rect x="144" y="0" width="166" height="34" rx="17" fill="#241738" stroke="#3D2556" stroke-width="1" />
+        <text x="227" y="22" text-anchor="middle" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#F5EDFA">ChaCha20-Poly1305</text>
+
+        <rect x="322" y="0" width="166" height="34" rx="17" fill="#6C3C91" stroke="#A473C3" stroke-opacity="0.6" stroke-width="1" />
+        <text x="405" y="22" text-anchor="middle" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#F5EDFA">Android Liquid Glass</text>
+
+        <rect x="500" y="0" width="138" height="34" rx="17" fill="#241738" stroke="#3D2556" stroke-width="1" />
+        <text x="569" y="22" text-anchor="middle" font-family="Inter, Segoe UI, system-ui, sans-serif" font-size="13" font-weight="600" fill="#34D399">Self-Hosted</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Liquid Glass Border Frame -->
+  <rect x="8" y="8" width="1184" height="364" rx="28" fill="none" stroke="url(#glassRim)" stroke-width="1.5" />
+</svg>

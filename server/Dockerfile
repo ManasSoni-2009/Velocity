@@ -26,11 +26,18 @@ COPY server/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh /app/velocity-relay
 
 EXPOSE 51820/udp
+EXPOSE 8080/tcp
 
 ENV BIND="0.0.0.0:51820"
+ENV STATUS_BIND="0.0.0.0:8080"
 ENV PSK="velocity-secret-key"
 ENV TUN="tun0"
+ENV TUN_CIDR="10.66.0.1/24"
+ENV MTU="1380"
 ENV WAN="eth0"
 ENV SUBNET="10.66.0.0/24"
+ENV MONTHLY_LIMIT_GB="10240"
+ENV PROVIDER_LABEL="Oracle Cloud Free"
+ENV USAGE_FILE="/var/lib/velocity-relay/usage.json"
 
 ENTRYPOINT ["/app/entrypoint.sh"]

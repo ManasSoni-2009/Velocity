@@ -4,10 +4,11 @@ use jni::JNIEnv;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
 use tracing::{error, info, warn, Level};
 use velocity_core::config::{BondingMode, TunnelConfig};
 use velocity_core::speedtest::SpeedTestEngine;
-use velocity_core::tunnel::TunnelRuntime;
+use velocity_core::tunnel::{probe_server_udp_detailed, TunnelEvent, TunnelRuntime};
 
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
@@ -59,6 +60,21 @@ pub struct JniTunnelWrapper {
     callback: Option<Arc<JniCallbackHandler>>,
 }
 
+#[cfg(unix)]
+unsafe fn dup_udp_socket(fd: jint) -> Option<tokio::net::UdpSocket> {
+    use std::os::fd::FromRawFd;
+    if fd < 0 {
+        return None;
+    }
+    let duped = libc::dup(fd);
+    if duped < 0 {
+        return None;
+    }
+    let std_sock = std::net::UdpSocket::from_raw_fd(duped);
+    let _ = std_sock.set_nonblocking(true);
+    tokio::net::UdpSocket::from_std(std_sock).ok()
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeInit(
     _env: JNIEnv,
@@ -100,7 +116,7 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeStar
     let config: TunnelConfig = match serde_json::from_str(&json_str) {
         Ok(c) => c,
         Err(e) => {
-            error!("Invalid TunnelConfig JSON: {:?}", e);
+            error!("Invalid TunnelConfig JSON: {:?} (raw={})", e, json_str);
             return 0;
         }
     };
@@ -113,14 +129,6 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeStar
         }
     };
 
-    let runtime = match TunnelRuntime::new(tun_fd, config) {
-        Ok(r) => r,
-        Err(e) => {
-            error!("Failed to create TunnelRuntime: {}", e);
-            return 0;
-        }
-    };
-
     let callback_handler = match JniCallbackHandler::new(&mut env, &callback) {
         Ok(h) => Some(Arc::new(h)),
         Err(e) => {
@@ -128,6 +136,41 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeStar
             None
         }
     };
+
+    let (event_tx, mut event_rx) = mpsc::unbounded_channel::<TunnelEvent>();
+
+    let runtime = match TunnelRuntime::new_with_options(tun_fd, config, Some(event_tx), None) {
+        Ok(r) => r,
+        Err(e) => {
+            error!("Failed to create TunnelRuntime: {}", e);
+            if let Some(cb) = &callback_handler {
+                cb.notify_state(4, &e);
+            }
+            return 0;
+        }
+    };
+
+    // Enter Tokio runtime to start housekeeping loop & forward events to Kotlin callback
+    let cb_clone = callback_handler.clone();
+    tokio_rt.block_on(async {
+        runtime.start_housekeeping();
+        tokio::spawn(async move {
+            while let Some(ev) = event_rx.recv().await {
+                if let Some(cb) = &cb_clone {
+                    match ev {
+                        TunnelEvent::StateChanged { state, message } => {
+                            cb.notify_state(state as i32, &message);
+                        }
+                        TunnelEvent::Telemetry(tel) => {
+                            if let Ok(json) = serde_json::to_string(&tel) {
+                                cb.notify_telemetry(&json);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
 
     if let Some(cb) = &callback_handler {
         cb.notify_state(1, "Connecting to multipath relay...");
@@ -148,7 +191,7 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeRegi
     _class: JClass,
     handle: jlong,
     path_id: jint,
-    socket_fd: jint,
+    #[allow(unused_variables)] socket_fd: jint,
     link_name: JString,
     is_metered: jboolean,
 ) -> jboolean {
@@ -164,36 +207,28 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeRegi
     let res = wrapper.tokio_rt.block_on(async {
         #[cfg(unix)]
         {
-            use std::os::fd::FromRawFd;
-            let std_sock = unsafe { std::net::UdpSocket::from_raw_fd(socket_fd) };
-            let _ = std_sock.set_nonblocking(true);
-            match tokio::net::UdpSocket::from_std(std_sock) {
-                Ok(tokio_sock) => {
-                    wrapper.runtime.register_socket(
-                        path_id as u8,
-                        tokio_sock,
-                        name_str,
-                        is_metered != 0,
-                    )
-                }
-                Err(e) => {
-                    error!("from_std socket error: {:?}", e);
+            match unsafe { dup_udp_socket(socket_fd) } {
+                Some(tokio_sock) => wrapper.runtime.register_socket(
+                    path_id as u8,
+                    tokio_sock,
+                    name_str,
+                    is_metered != 0,
+                ),
+                None => {
+                    error!("dup_udp_socket failed for fd={}", socket_fd);
                     false
                 }
             }
         }
         #[cfg(not(unix))]
         {
-            // Windows / host dev fallback
             match tokio::net::UdpSocket::bind("0.0.0.0:0").await {
-                Ok(tokio_sock) => {
-                    wrapper.runtime.register_socket(
-                        path_id as u8,
-                        tokio_sock,
-                        name_str,
-                        is_metered != 0,
-                    )
-                }
+                Ok(tokio_sock) => wrapper.runtime.register_socket(
+                    path_id as u8,
+                    tokio_sock,
+                    name_str,
+                    is_metered != 0,
+                ),
                 Err(e) => {
                     error!("bind fallback socket error: {:?}", e);
                     false
@@ -203,9 +238,6 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeRegi
     });
 
     if res {
-        if let Some(cb) = &wrapper.callback {
-            cb.notify_state(2, "Multipath bonded and active");
-        }
         JNI_TRUE
     } else {
         JNI_FALSE
@@ -259,8 +291,25 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeSetM
 }
 
 #[no_mangle]
+pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeUpdateConfig(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    wifi_bias_percent: jint,
+    fec_enabled: jboolean,
+) {
+    if handle == 0 {
+        return;
+    }
+    let wrapper = unsafe { &mut *(handle as *mut JniTunnelWrapper) };
+    wrapper
+        .runtime
+        .update_tuning(wifi_bias_percent.clamp(0, 100) as u8, fec_enabled != 0);
+}
+
+#[no_mangle]
 pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeGetTelemetryJson(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JClass,
     handle: jlong,
 ) -> jstring {
@@ -269,12 +318,59 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeGetT
     }
     let wrapper = unsafe { &mut *(handle as *mut JniTunnelWrapper) };
     let json = wrapper.runtime.get_telemetry_json();
-
-    if let Some(cb) = &wrapper.callback {
-        cb.notify_telemetry(&json);
-    }
-
     env.new_string(json).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeProbeServerJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    config_json: JString,
+    path_id: jint,
+    socket_fd: jint,
+) -> jstring {
+    let json_str: String = match env.get_string(&config_json) {
+        Ok(s) => s.into(),
+        Err(_) => "{}".to_string(),
+    };
+
+    let config: TunnelConfig = match serde_json::from_str(&json_str) {
+        Ok(c) => c,
+        Err(e) => {
+            let err_json = serde_json::json!({ "reachable": false, "error": format!("Invalid config: {}", e) }).to_string();
+            return env.new_string(err_json).unwrap().into_raw();
+        }
+    };
+
+    let rt = match Runtime::new() {
+        Ok(r) => r,
+        Err(e) => {
+            let err_json = serde_json::json!({ "reachable": false, "error": e.to_string() }).to_string();
+            return env.new_string(err_json).unwrap().into_raw();
+        }
+    };
+
+    let res = rt.block_on(async {
+        #[cfg(unix)]
+        let sock = unsafe { dup_udp_socket(socket_fd) };
+        #[cfg(not(unix))]
+        let sock = {
+            let _ = socket_fd;
+            None
+        };
+        probe_server_udp_detailed(&config.server_host, config.server_port, &config.psk, path_id as u8, sock, 1500).await
+    });
+
+    let out = match res {
+        Ok(outcome) => serde_json::json!({
+            "reachable": true,
+            "rttMs": outcome.rtt_ms.round() as i32,
+            "quota": outcome.quota
+        })
+        .to_string(),
+        Err(e) => serde_json::json!({ "reachable": false, "error": e }).to_string(),
+    };
+    env.new_string(out).unwrap().into_raw()
 }
 
 #[no_mangle]
@@ -283,23 +379,77 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeRunS
     _class: JClass,
     config_json: JString,
 ) -> jstring {
+    run_speed_test_internal(&mut env, config_json, -1, -1)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeRunMultipathSpeedTestJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    config_json: JString,
+    wifi_fd: jint,
+    cell_fd: jint,
+) -> jstring {
+    run_speed_test_internal(&mut env, config_json, wifi_fd, cell_fd)
+}
+
+fn run_speed_test_internal(
+    env: &mut JNIEnv,
+    config_json: JString,
+    wifi_fd: jint,
+    cell_fd: jint,
+) -> jstring {
     let json_str: String = match env.get_string(&config_json) {
         Ok(s) => s.into(),
         Err(_) => "{}".to_string(),
     };
 
-    let config: TunnelConfig = serde_json::from_str(&json_str).unwrap_or_default();
-    let engine = SpeedTestEngine::new(config);
+    let config: TunnelConfig = match serde_json::from_str(&json_str) {
+        Ok(c) => c,
+        Err(e) => {
+            let err_json = serde_json::json!({ "error": format!("Invalid config: {}", e) }).to_string();
+            return env.new_string(err_json).unwrap().into_raw();
+        }
+    };
 
-    let rt = Runtime::new().unwrap();
+    let engine = SpeedTestEngine::new(config);
+    let rt = match Runtime::new() {
+        Ok(r) => r,
+        Err(e) => {
+            let err_json = serde_json::json!({ "error": e.to_string() }).to_string();
+            return env.new_string(err_json).unwrap().into_raw();
+        }
+    };
+
     let result = rt.block_on(async {
-        // Run test on dynamic ephemeral ports
-        engine.run_test(0, 0).await
+        if wifi_fd >= 0 || cell_fd >= 0 {
+            #[cfg(unix)]
+            let ws = unsafe { dup_udp_socket(wifi_fd) }.map(Arc::new);
+            #[cfg(not(unix))]
+            let ws = if wifi_fd >= 0 {
+                tokio::net::UdpSocket::bind("0.0.0.0:0").await.ok().map(Arc::new)
+            } else {
+                None
+            };
+
+            #[cfg(unix)]
+            let cs = unsafe { dup_udp_socket(cell_fd) }.map(Arc::new);
+            #[cfg(not(unix))]
+            let cs = if cell_fd >= 0 {
+                tokio::net::UdpSocket::bind("0.0.0.0:0").await.ok().map(Arc::new)
+            } else {
+                None
+            };
+
+            engine.run_with_sockets(ws, cs).await
+        } else {
+            engine.run_test(0, 0).await
+        }
     });
 
     let res_json = match result {
         Ok(res) => serde_json::to_string(&res).unwrap_or_else(|_| "{}".to_string()),
-        Err(e) => format!("{{\"error\":\"{}\"}}", e),
+        Err(e) => serde_json::json!({ "error": e }).to_string(),
     };
 
     env.new_string(res_json).unwrap().into_raw()
@@ -314,7 +464,7 @@ pub extern "system" fn Java_com_velocity_app_nativebridge_VelocityJni_nativeStop
     if handle == 0 {
         return;
     }
-    let mut wrapper = unsafe { Box::from_raw(handle as *mut JniTunnelWrapper) };
+    let wrapper = unsafe { Box::from_raw(handle as *mut JniTunnelWrapper) };
     wrapper.runtime.stop();
     if let Some(cb) = &wrapper.callback {
         cb.notify_state(0, "Disconnected");

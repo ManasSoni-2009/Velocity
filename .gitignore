@@ -20,6 +20,9 @@ local.properties
 .cxx/
 captures/
 
+# Local toolchain & caches (never bloat C: or commit binaries)
+.tools/
+
 # IDE & OS
 .idea/
 *.iml

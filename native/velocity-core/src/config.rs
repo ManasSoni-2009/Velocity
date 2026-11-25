@@ -27,22 +27,40 @@ impl From<i32> for BondingMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TunnelConfig {
+    #[serde(alias = "serverHost")]
     pub server_host: String,
+    #[serde(alias = "serverPort")]
     pub server_port: u16,
+    #[serde(alias = "psk_hex", alias = "pskHex")]
     pub psk: String,
+    #[serde(default, alias = "sessionId")]
     pub session_id: Option<u64>,
     #[serde(default = "default_mtu")]
     pub mtu: usize,
     #[serde(default)]
     pub mode: u8,
-    #[serde(default = "default_reorder_timeout_ms")]
+    #[serde(default = "default_true", alias = "fecEnabled")]
+    pub fec_enabled: bool,
+    #[serde(default = "default_true", alias = "directDnsGuard")]
+    pub direct_dns_guard: bool,
+    #[serde(default = "default_wifi_bias", alias = "wifiBiasPercent")]
+    pub wifi_bias_percent: u8,
+    #[serde(default = "default_reorder_timeout_ms", alias = "minReorderTimeoutMs")]
     pub min_reorder_timeout_ms: u64,
-    #[serde(default = "default_max_reorder_timeout_ms")]
+    #[serde(default = "default_max_reorder_timeout_ms", alias = "maxReorderTimeoutMs")]
     pub max_reorder_timeout_ms: u64,
 }
 
 fn default_mtu() -> usize {
     1380
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_wifi_bias() -> u8 {
+    70
 }
 
 fn default_reorder_timeout_ms() -> u64 {
@@ -62,6 +80,9 @@ impl Default for TunnelConfig {
             session_id: None,
             mtu: default_mtu(),
             mode: 0,
+            fec_enabled: true,
+            direct_dns_guard: true,
+            wifi_bias_percent: default_wifi_bias(),
             min_reorder_timeout_ms: default_reorder_timeout_ms(),
             max_reorder_timeout_ms: default_max_reorder_timeout_ms(),
         }

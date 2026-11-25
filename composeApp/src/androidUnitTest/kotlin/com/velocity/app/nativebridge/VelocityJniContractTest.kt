@@ -39,8 +39,23 @@ class VelocityJniContractTest {
                 Long::class.javaPrimitiveType,
                 Int::class.javaPrimitiveType,
             ),
+            "nativeUpdateConfig" to listOf(
+                Long::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                Boolean::class.javaPrimitiveType,
+            ),
             "nativeGetTelemetryJson" to listOf(Long::class.javaPrimitiveType),
+            "nativeProbeServerJson" to listOf(
+                String::class.java,
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+            ),
             "nativeRunSpeedTestJson" to listOf(String::class.java),
+            "nativeRunMultipathSpeedTestJson" to listOf(
+                String::class.java,
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+            ),
             "nativeStopTunnel" to listOf(Long::class.javaPrimitiveType),
         )
 

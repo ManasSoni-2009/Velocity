@@ -73,13 +73,24 @@ object ServerUriCodec {
         return "$SCHEME${profile.pskHex}@$hostFormatted:${profile.port}?$query"
     }
 
+    fun oracleCloudSnippet(profile: ServerProfile): String = """
+        # Run on Oracle Cloud Always Free Ubuntu ARM64 (VM.Standard.A1.Flex)
+        sudo PSK=${profile.pskHex} \
+          BIND_PORT=${profile.port} \
+          MONTHLY_LIMIT_GB=10240 \
+          ENFORCE_QUOTA=true \
+          bash server/oci/install-oci.sh
+    """.trimIndent()
+
     fun dockerSnippet(profile: ServerProfile): String = """
         docker run -d --name velocity-relay --restart unless-stopped \
           --cap-add=NET_ADMIN --device=/dev/net/tun \
           -p ${profile.port}:${profile.port}/udp \
-          -e VELOCITY_PSK=${profile.pskHex} \
-          -e VELOCITY_PORT=${profile.port} \
-          -e VELOCITY_MTU=${profile.mtu} \
+          -p 8080:8080/tcp \
+          -e PSK=${profile.pskHex} \
+          -e BIND=0.0.0.0:${profile.port} \
+          -e MTU=${profile.mtu} \
+          -e MONTHLY_LIMIT_GB=10240 \
           ghcr.io/manassoni-2009/velocity-relay:latest
     """.trimIndent()
 
@@ -90,7 +101,10 @@ object ServerUriCodec {
           --psk ${profile.pskHex} \
           --tun-name vel0 \
           --tun-cidr 10.66.0.1/24 \
-          --mtu ${profile.mtu}
+          --mtu ${profile.mtu} \
+          --monthly-limit-gb 10240 \
+          --enforce-quota \
+          --usage-file /var/lib/velocity-relay/usage.json
     """.trimIndent()
 
     private fun parseHostPort(hostPort: String): Pair<String, Int> {

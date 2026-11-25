@@ -64,6 +64,10 @@ impl FecEncoder {
 
 pub struct MultipathScheduler {
     pub mode: BondingMode,
+    pub wifi_bias_percent: u8,
+    pub fec_enabled: bool,
+    pub fec_sent_packets: u64,
+    pub duplicated_packets: u64,
     deficits: [i64; 2],
     fec_encoder: FecEncoder,
     last_keepalive: Instant,
@@ -80,6 +84,10 @@ impl MultipathScheduler {
     pub fn new(mode: BondingMode) -> Self {
         Self {
             mode,
+            wifi_bias_percent: 50,
+            fec_enabled: true,
+            fec_sent_packets: 0,
+            duplicated_packets: 0,
             deficits: [0, 0],
             fec_encoder: FecEncoder::new(),
             last_keepalive: Instant::now(),
@@ -91,7 +99,12 @@ impl MultipathScheduler {
         self.mode = mode;
     }
 
-    /// Check if a periodic keepalive probe should be sent on Cellular (Path 1)
+    pub fn update_tuning(&mut self, wifi_bias_percent: u8, fec_enabled: bool) {
+        self.wifi_bias_percent = wifi_bias_percent.min(100);
+        self.fec_enabled = fec_enabled;
+    }
+
+    /// Check if a periodic keepalive probe should be sent on Cellular (Path 1).
     pub fn should_send_keepalive(&mut self) -> bool {
         if self.last_keepalive.elapsed() >= Duration::from_millis(KEEP_ALIVE_INTERVAL_MS) {
             self.last_keepalive = Instant::now();
@@ -101,7 +114,7 @@ impl MultipathScheduler {
         }
     }
 
-    /// Decide scheduling action for an outgoing packet
+    /// Decide scheduling action for an outgoing packet.
     pub fn schedule(
         &mut self,
         packet: &[u8],
@@ -114,7 +127,7 @@ impl MultipathScheduler {
         match (p0_opt, p1_opt) {
             (Some(_), None) => ScheduleDecision::SendSingle { path_id: 0 },
             (None, Some(_)) => ScheduleDecision::SendSingle { path_id: 1 },
-            (None, None) => ScheduleDecision::SendSingle { path_id: 0 }, // fallback
+            (None, None) => ScheduleDecision::SendSingle { path_id: 0 },
             (Some(p0), Some(p1)) => self.schedule_dual(packet, seq_num, p0, p1),
         }
     }
@@ -133,7 +146,7 @@ impl MultipathScheduler {
         }
     }
 
-    /// Mode 0: Arrival-time-compensated BDP-weighted deficit round-robin
+    /// Mode 0: Arrival-time-compensated BDP-weighted deficit round-robin.
     fn schedule_speed(
         &mut self,
         packet: &[u8],
@@ -142,16 +155,19 @@ impl MultipathScheduler {
     ) -> ScheduleDecision {
         let pkt_size = packet.len();
 
-        // If one path is completely dead, use the other
         if !p0.is_alive() && p1.is_alive() {
             return ScheduleDecision::SendSingle { path_id: 1 };
         }
         if !p1.is_alive() && p0.is_alive() {
             return ScheduleDecision::SendSingle { path_id: 0 };
         }
+        if self.wifi_bias_percent >= 98 {
+            return ScheduleDecision::SendSingle { path_id: 0 };
+        }
+        if self.wifi_bias_percent <= 2 {
+            return ScheduleDecision::SendSingle { path_id: 1 };
+        }
 
-        // Expected arrival time in microseconds:
-        // T_arr = RTT / 2 + (inflight + pkt_size) * 8 * 1_000_000 / delivery_rate_bps
         let rate0 = p0.delivery_rate_bps.max(500_000) as f64;
         let rate1 = p1.delivery_rate_bps.max(500_000) as f64;
 
@@ -161,25 +177,24 @@ impl MultipathScheduler {
         let est_arrival0_us = (p0.srtt_us as f64 / 2.0) + queue_delay0_us;
         let est_arrival1_us = (p1.srtt_us as f64 / 2.0) + queue_delay1_us;
 
-        // BDP limits
         let bdp0 = p0.bdp_bytes();
         let bdp1 = p1.bdp_bytes();
 
         let headroom0 = (bdp0 as isize) - (p0.in_flight_bytes as isize);
         let headroom1 = (bdp1 as isize) - (p1.in_flight_bytes as isize);
 
-        // Quantum proportional to delivery rate
-        let quantum0 = ((rate0 / 8.0) * 0.005).clamp(1500.0, 32768.0) as i64;
-        let quantum1 = ((rate1 / 8.0) * 0.005).clamp(1500.0, 32768.0) as i64;
+        // Apply user Wi-Fi bias smoothly around neutral 50%
+        let bias0 = (self.wifi_bias_percent as f64 / 50.0).clamp(0.2, 1.8);
+        let bias1 = ((100 - self.wifi_bias_percent) as f64 / 50.0).clamp(0.2, 1.8);
 
-        // Replenish deficits when both paths are out of quota for this packet size
+        let quantum0 = (((rate0 / 8.0) * 0.005) * bias0).clamp(1500.0, 48000.0) as i64;
+        let quantum1 = (((rate1 / 8.0) * 0.005) * bias1).clamp(1500.0, 48000.0) as i64;
+
         if self.deficits[0] < (pkt_size as i64) && self.deficits[1] < (pkt_size as i64) {
             self.deficits[0] += quantum0;
             self.deficits[1] += quantum1;
         }
 
-        // Choose path: if one path has no BDP headroom, use other;
-        // Otherwise, balance by deficit and arrival time
         let choose_path0 = if headroom0 <= 0 && headroom1 > 0 {
             false
         } else if headroom1 <= 0 && headroom0 > 0 {
@@ -203,7 +218,7 @@ impl MultipathScheduler {
         }
     }
 
-    /// Mode 1: Min-RTT routing for interactive packets + adaptive XOR FEC / selective duplication
+    /// Mode 1: Min-RTT routing for interactive packets + adaptive XOR FEC / selective duplication.
     fn schedule_low_latency(
         &mut self,
         packet: &[u8],
@@ -211,18 +226,21 @@ impl MultipathScheduler {
         p0: &PathEstimator,
         p1: &PathEstimator,
     ) -> ScheduleDecision {
+        if !p0.is_alive() && p1.is_alive() {
+            return ScheduleDecision::SendSingle { path_id: 1 };
+        }
+        if !p1.is_alive() && p0.is_alive() {
+            return ScheduleDecision::SendSingle { path_id: 0 };
+        }
+
         let is_small = packet.len() < 256;
-        let is_tcp_ack = if packet.len() >= 40 && packet[0] >> 4 == 4 {
-            // IPv4 header (20 bytes min) + TCP (20 bytes min)
-            let proto = packet[9];
-            proto == 6 // TCP
+        let is_tcp = if packet.len() >= 40 && packet[0] >> 4 == 4 {
+            packet[9] == 6
         } else {
             false
         };
+        let is_interactive = is_small || is_tcp;
 
-        let is_interactive = is_small || is_tcp_ack;
-
-        // Min-RTT path selection
         let (best_path, other_path, best_loss, best_jitter) = if p0.srtt_us <= p1.srtt_us {
             (0, 1, p0.loss_rate, p0.jitter_us)
         } else {
@@ -232,8 +250,8 @@ impl MultipathScheduler {
         let loss_spike = best_loss > 0.01 || best_jitter > 15_000;
 
         if is_interactive {
-            if loss_spike {
-                // Duplicate critical small packets across both paths
+            if loss_spike && p0.is_alive() && p1.is_alive() {
+                self.duplicated_packets += 1;
                 ScheduleDecision::SendDuplicate {
                     primary_path: best_path,
                     secondary_path: other_path,
@@ -241,9 +259,9 @@ impl MultipathScheduler {
             } else {
                 ScheduleDecision::SendSingle { path_id: best_path }
             }
-        } else if loss_spike {
-            // Bulk packet with loss spike: emit adaptive XOR FEC parity
+        } else if loss_spike && self.fec_enabled {
             if let Some((base_seq, parity)) = self.fec_encoder.push_packet(seq_num, packet) {
+                self.fec_sent_packets += 1;
                 ScheduleDecision::SendWithFec {
                     path_id: best_path,
                     parity_data: parity,
@@ -257,19 +275,18 @@ impl MultipathScheduler {
         }
     }
 
-    /// Mode 2: Primary Wi-Fi with <100ms failover to Cellular
+    /// Mode 2: Primary Wi-Fi with <100ms failover to Cellular.
     fn schedule_failover(&mut self, p0: &PathEstimator, p1: &PathEstimator) -> ScheduleDecision {
         let now = Instant::now();
         if p0.is_alive() {
             self.last_path0_healthy = now;
             ScheduleDecision::SendSingle { path_id: 0 }
+        } else if !p1.is_alive() {
+            ScheduleDecision::SendSingle { path_id: 0 }
+        } else if now.duration_since(self.last_path0_healthy).as_millis() > FAILOVER_TIMEOUT_MS {
+            ScheduleDecision::SendSingle { path_id: 1 }
         } else {
-            // Check failover threshold (< 80ms)
-            if now.duration_since(self.last_path0_healthy).as_millis() > FAILOVER_TIMEOUT_MS {
-                ScheduleDecision::SendSingle { path_id: 1 }
-            } else {
-                ScheduleDecision::SendSingle { path_id: 0 }
-            }
+            ScheduleDecision::SendSingle { path_id: 0 }
         }
     }
 }

@@ -3,7 +3,6 @@ package com.velocity.app
 import com.velocity.app.domain.*
 import com.velocity.app.platform.VelocityPlatformBridge
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,14 +14,34 @@ import kotlin.test.*
 class FakePlatformBridge : VelocityPlatformBridge {
     val telemetryState = MutableStateFlow(CombinedTelemetry())
     val connectionState = MutableStateFlow(ConnectionStatus())
+    val networkHealthState = MutableStateFlow(
+        NetworkHealthSnapshot(
+            wifi = LinkHealth(
+                type = LinkType.WIFI,
+                readiness = LinkReadiness.ONLINE,
+                networkLabel = "Wi-Fi",
+                detailText = "Internet ready",
+            ),
+            cellular = LinkHealth(
+                type = LinkType.CELLULAR,
+                readiness = LinkReadiness.ONLINE,
+                networkLabel = "5G",
+                detailText = "Internet ready",
+                isMetered = true,
+            ),
+            summaryHeadline = "Wi-Fi & 5G ready",
+        ),
+    )
 
     override val telemetryFlow: StateFlow<CombinedTelemetry> = telemetryState
     override val connectionStateFlow: StateFlow<ConnectionStatus> = connectionState
+    override val networkHealthFlow: StateFlow<NetworkHealthSnapshot> = networkHealthState
 
     var connectCalled = false
     var disconnectCalled = false
     var lastModeSet: BondingMode? = null
     var lastRulesUpdated: List<AppTunnelRule>? = null
+    var lastSavedState: PersistedVelocityState? = null
     var copiedLabel: String? = null
     var copiedText: String? = null
 
@@ -46,7 +65,7 @@ class FakePlatformBridge : VelocityPlatformBridge {
         disconnectCalled = true
         connectionState.value = ConnectionStatus(
             state = ConnectionState.DISCONNECTED,
-            message = "Disconnected",
+            message = "Ready",
         )
         return Result.success(Unit)
     }
@@ -90,15 +109,15 @@ class FakePlatformBridge : VelocityPlatformBridge {
         }
     }
 
-    override suspend fun parseAndSaveServerUri(uri: String): Result<ServerProfile> {
-        return ServerUriCodec.parse(uri)
-    }
+    override suspend fun parseAndSaveServerUri(uri: String): Result<ServerProfile> = ServerUriCodec.parse(uri)
 
-    override suspend fun getInstalledApps(): List<AppTunnelRule> {
-        return listOf(
-            AppTunnelRule("com.test.app1", "App One", TunnelRulePolicy.BONDED),
-            AppTunnelRule("com.test.app2", "App Two", TunnelRulePolicy.BYPASS),
-        )
+    override suspend fun getInstalledApps(): List<AppTunnelRule> = listOf(
+        AppTunnelRule("com.test.app1", "App One", TunnelRulePolicy.BONDED),
+        AppTunnelRule("com.test.app2", "App Two", TunnelRulePolicy.BYPASS),
+    )
+
+    override suspend fun savePersistedState(state: PersistedVelocityState) {
+        lastSavedState = state
     }
 
     override fun copyToClipboard(label: String, text: String) {
@@ -106,14 +125,22 @@ class FakePlatformBridge : VelocityPlatformBridge {
         copiedText = text
     }
 
-    override fun isSystemDarkTheme(): Boolean = true
+    override fun isSystemDarkTheme(): Boolean = false
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BondingViewModelTest {
 
+    private fun testServer() = ServerProfile(
+        id = "srv-test",
+        name = "Test Relay",
+        host = "203.0.113.10",
+        port = 51820,
+        pskHex = "0123456789abcdef0123456789abcdef",
+    )
+
     @Test
-    fun testInitialStateAndTabSwitching() = runTest {
+    fun testInitialStateAndThreeTabSwitching() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val bridge = FakePlatformBridge()
         val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
@@ -123,32 +150,63 @@ class BondingViewModelTest {
         assertEquals(VelocityTab.BOND, state.currentTab)
         assertEquals(ConnectionState.DISCONNECTED, state.connectionStatus.state)
         assertEquals(2, state.appRules.size)
-        assertTrue(state.servers.isNotEmpty())
+        assertTrue(state.servers.isEmpty())
 
-        viewModel.selectTab(VelocityTab.TELEMETRY)
-        assertEquals(VelocityTab.TELEMETRY, viewModel.uiState.value.currentTab)
-
-        viewModel.selectTab(VelocityTab.SERVERS)
-        assertEquals(VelocityTab.SERVERS, viewModel.uiState.value.currentTab)
+        viewModel.selectTab(VelocityTab.RELAYS)
+        assertEquals(VelocityTab.RELAYS, viewModel.uiState.value.currentTab)
 
         viewModel.selectTab(VelocityTab.SETTINGS)
         assertEquals(VelocityTab.SETTINGS, viewModel.uiState.value.currentTab)
     }
 
     @Test
-    fun testToggleConnectAndDisconnect() = runTest {
+    fun testConnectPromptsRelaySetupWhenNoServerConfigured() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val bridge = FakePlatformBridge()
         val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
         advanceUntilIdle()
 
-        // Connect
+        viewModel.toggleConnect()
+        advanceUntilIdle()
+
+        assertFalse(bridge.connectCalled)
+        assertEquals(VelocityTab.RELAYS, viewModel.uiState.value.currentTab)
+        assertTrue(viewModel.uiState.value.showImportDialog)
+    }
+
+    @Test
+    fun testConnectBlockedWhenBothLinksHaveNoInternet() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val bridge = FakePlatformBridge()
+        bridge.networkHealthState.value = NetworkHealthSnapshot(
+            wifi = LinkHealth(LinkType.WIFI, LinkReadiness.NO_INTERNET, detailText = "Connected · No internet"),
+            cellular = LinkHealth(LinkType.CELLULAR, LinkReadiness.UNAVAILABLE, detailText = "Mobile data off"),
+            summaryHeadline = "No internet connection",
+            advisoryMessage = "Wi-Fi has no internet access and mobile data is unavailable.",
+        )
+
+        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher), initialServers = listOf(testServer()))
+        advanceUntilIdle()
+
+        viewModel.toggleConnect()
+        advanceUntilIdle()
+
+        assertFalse(bridge.connectCalled)
+        assertNotNull(viewModel.uiState.value.bannerMessage)
+    }
+
+    @Test
+    fun testToggleConnectAndDisconnectWithServer() = runTest {
+        val testDispatcher = StandardTestDispatcher(testScheduler)
+        val bridge = FakePlatformBridge()
+        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher), initialServers = listOf(testServer()))
+        advanceUntilIdle()
+
         viewModel.toggleConnect()
         advanceUntilIdle()
         assertTrue(bridge.connectCalled)
         assertEquals(ConnectionState.BONDED, viewModel.uiState.value.connectionStatus.state)
 
-        // Disconnect
         viewModel.toggleConnect()
         advanceUntilIdle()
         assertTrue(bridge.disconnectCalled)
@@ -156,43 +214,37 @@ class BondingViewModelTest {
     }
 
     @Test
-    fun testModeSwitching() = runTest {
+    fun testModeSwitchingAndPersistence() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val bridge = FakePlatformBridge()
-        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
+        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher), initialServers = listOf(testServer()))
         advanceUntilIdle()
 
         viewModel.selectMode(BondingMode.LOW_LATENCY)
         advanceUntilIdle()
         assertEquals(BondingMode.LOW_LATENCY, bridge.lastModeSet)
         assertEquals(BondingMode.LOW_LATENCY, viewModel.uiState.value.connectionStatus.activeMode)
-
-        viewModel.selectMode(BondingMode.FAILOVER)
-        advanceUntilIdle()
-        assertEquals(BondingMode.FAILOVER, bridge.lastModeSet)
-        assertEquals(BondingMode.FAILOVER, viewModel.uiState.value.connectionStatus.activeMode)
+        assertEquals(BondingMode.LOW_LATENCY, bridge.lastSavedState?.activeMode)
     }
 
     @Test
-    fun testServerImportSuccessAndFailure() = runTest {
+    fun testManualServerAddAndUriImport() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val bridge = FakePlatformBridge()
         val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
         advanceUntilIdle()
 
-        val validUri = "velocity://0123456789abcdef0123456789abcdef@myrelay.net:51820?name=CustomRelay"
-        val success = viewModel.importServerUri(validUri)
+        val added = viewModel.addManualServer("Home VPS", "198.51.100.2", "51820", "0123456789abcdef0123456789abcdef")
         advanceUntilIdle()
-        assertTrue(success)
-        assertNull(viewModel.uiState.value.importError)
-        val imported = viewModel.uiState.value.servers.find { it.name == "CustomRelay" }
-        assertNotNull(imported)
-        assertEquals(imported.id, viewModel.uiState.value.selectedServerId)
+        assertTrue(added)
+        assertEquals(1, viewModel.uiState.value.servers.size)
 
-        val invalidUri = "invalid://something"
-        val failed = viewModel.importServerUri(invalidUri)
+        val validUri = "velocity://0123456789abcdef0123456789abcdef@myrelay.net:51820?name=CustomRelay"
+        assertTrue(viewModel.importServerUri(validUri))
         advanceUntilIdle()
-        assertFalse(failed)
+        assertEquals(2, viewModel.uiState.value.servers.size)
+
+        assertFalse(viewModel.importServerUri("invalid://something"))
         assertNotNull(viewModel.uiState.value.importError)
     }
 
@@ -200,7 +252,7 @@ class BondingViewModelTest {
     fun testSpeedTestRunnerFlow() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val bridge = FakePlatformBridge()
-        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
+        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher), initialServers = listOf(testServer()))
         advanceUntilIdle()
 
         viewModel.startSpeedTest()
@@ -214,7 +266,7 @@ class BondingViewModelTest {
     }
 
     @Test
-    fun testUpdateAppRule() = runTest {
+    fun testUpdateAppRuleAndSettings() = runTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val bridge = FakePlatformBridge()
         val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
@@ -222,22 +274,13 @@ class BondingViewModelTest {
 
         viewModel.updateAppRule("com.test.app1", TunnelRulePolicy.LOW_LATENCY)
         advanceUntilIdle()
-
         val updated = viewModel.uiState.value.appRules.find { it.packageName == "com.test.app1" }
         assertEquals(TunnelRulePolicy.LOW_LATENCY, updated?.policy)
         assertNotNull(bridge.lastRulesUpdated)
-    }
 
-    @Test
-    fun testUpdateSettings() = runTest {
-        val testDispatcher = StandardTestDispatcher(testScheduler)
-        val bridge = FakePlatformBridge()
-        val viewModel = BondingViewModel(bridge, CoroutineScope(testDispatcher))
+        viewModel.updateSettings { it.copy(wifiBiasPercent = 85, reduceMotion = true) }
         advanceUntilIdle()
-
-        viewModel.updateSettings { it.copy(wifiBiasPercent = 85, reduceTransparency = true) }
-        val settings = viewModel.uiState.value.settings
-        assertEquals(85, settings.wifiBiasPercent)
-        assertTrue(settings.reduceTransparency)
+        assertEquals(85, viewModel.uiState.value.settings.wifiBiasPercent)
+        assertTrue(viewModel.uiState.value.settings.reduceMotion)
     }
 }

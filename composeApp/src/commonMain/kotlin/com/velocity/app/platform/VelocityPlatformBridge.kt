@@ -11,12 +11,13 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Cross-platform bridge interface connecting shared KMP UI & state
- * to the underlying platform runtime (Android VpnService + native Rust JNI,
- * or Desktop JVM standalone simulated/socket engine).
+ * to the underlying platform runtime (Android VpnService + native Rust JNI + AndroidNetworkMonitor,
+ * or Desktop JVM relay/preview engine).
  */
 interface VelocityPlatformBridge {
     val telemetryFlow: StateFlow<CombinedTelemetry>
     val connectionStateFlow: StateFlow<ConnectionStatus>
+    val networkHealthFlow: StateFlow<NetworkHealthSnapshot>
 
     suspend fun connect(
         server: ServerProfile,
@@ -29,7 +30,11 @@ interface VelocityPlatformBridge {
 
     suspend fun setMode(mode: BondingMode): Result<Unit>
 
+    suspend fun updateTuning(settings: VelocitySettings): Result<Unit> = Result.success(Unit)
+
     suspend fun updateSplitTunnelApps(rules: List<AppTunnelRule>): Result<Unit>
+
+    suspend fun refreshNetworkHealth() {}
 
     suspend fun runSpeedTest(
         server: ServerProfile,
@@ -42,15 +47,19 @@ interface VelocityPlatformBridge {
 
     suspend fun getInstalledApps(): List<AppTunnelRule>
 
+    suspend fun loadPersistedState(): PersistedVelocityState? = null
+
+    suspend fun savePersistedState(state: PersistedVelocityState) {}
+
     fun copyToClipboard(label: String, text: String)
 
-    fun isSystemDarkTheme(): Boolean = true
+    fun isSystemDarkTheme(): Boolean = false
+
+    fun isReduceMotionEnabled(): Boolean = false
 }
 
 /**
- * Expect composable for authentic Apple Liquid Glass HIG surface.
- * Desktop implements this via Skiko SkSL RuntimeShader backdrop blur + refraction.
- * Android implements this via AGSL RuntimeShader (API 33+) or blur/transparency fallback.
+ * Tactile surface container honoring Reduce Transparency & High Contrast accessibility modes.
  */
 @Composable
 expect fun LiquidGlassSurface(
@@ -62,3 +71,11 @@ expect fun LiquidGlassSurface(
     highContrast: Boolean = false,
     content: @Composable BoxScope.() -> Unit,
 )
+
+/**
+ * Applies real optical backdrop blur & liquid displacement refraction (`#container-glass`)
+ * to the captured backdrop layer behind the floating navigation bar.
+ */
+expect fun Modifier.liquidGlassBackdropFilter(
+    reduceTransparency: Boolean = false,
+): Modifier

@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,9 +17,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.velocity.app.domain.SpeedTestProgress
-import com.velocity.app.ui.theme.VelocityColors
+import com.velocity.app.ui.theme.LocalVelocitySemantic
 
 @Composable
 fun SpeedTestRunner(
@@ -26,188 +26,170 @@ fun SpeedTestRunner(
     onStartTest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val cardBg = Color(0xFF101827).copy(alpha = 0.9f)
-    val cardBorder = Color(0xFF1F2937)
+    val semantic = LocalVelocitySemantic.current
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(cardBg)
-            .border(1.dp, cardBorder, RoundedCornerShape(20.dp))
-            .padding(16.dp),
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(semantic.mutedSurface.copy(alpha = 0.55f))
+            .border(1.dp, semantic.cardBorder, RoundedCornerShape(18.dp))
+            .padding(14.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "MULTIPATH SPEED BENCHMARK",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                    color = Color.White.copy(alpha = 0.6f),
+                    text = "Speed Benchmark",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = semantic.primaryInk,
                 )
                 Text(
-                    text = if (speedTest.isRunning) speedTest.phase else "Dual-Path Aggregation Test",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White.copy(alpha = 0.85f),
+                    text = if (speedTest.isRunning) speedTest.phase else "Tests Wi-Fi, Cellular & combined throughput",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = semantic.secondaryInk,
                 )
             }
+
+            Spacer(modifier = Modifier.width(10.dp))
 
             Button(
                 onClick = onStartTest,
                 enabled = !speedTest.isRunning,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = VelocityColors.ElectricBlue,
-                    contentColor = Color.White,
-                    disabledContainerColor = VelocityColors.ElectricBlue.copy(alpha = 0.4f),
+                    containerColor = semantic.accent,
+                    contentColor = semantic.onAccent,
+                    disabledContainerColor = semantic.accent.copy(alpha = 0.4f),
                 ),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(14.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             ) {
                 Text(
-                    text = if (speedTest.isRunning) "Testing..." else if (speedTest.result != null) "Retest" else "Run Test",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
+                    text = when {
+                        speedTest.isRunning -> "Testing…"
+                        speedTest.result != null -> "Retest"
+                        else -> "Run Test"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
                 )
             }
         }
 
         if (speedTest.isRunning) {
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             LinearProgressIndicator(
-                progress = { speedTest.progressFraction },
+                progress = { speedTest.progressFraction.coerceIn(0f, 1f) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp)),
-                color = VelocityColors.CyanGlow,
-                trackColor = Color(0xFF1E293B),
+                color = semantic.accent,
+                trackColor = semantic.cardBorder,
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.Bottom,
-            ) {
+            if (speedTest.liveCombinedMbps > 0.1) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "${((speedTest.liveCombinedMbps * 10).toInt() / 10.0)}",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = VelocityColors.CyanGlow,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Mbps",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(bottom = 4.dp),
+                    text = "${((speedTest.liveCombinedMbps * 10).toInt() / 10.0)} Mbps",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = semantic.accent,
                 )
             }
         }
 
         speedTest.result?.let { res ->
             Spacer(modifier = Modifier.height(14.dp))
-            // Result Summary Card
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF0F172A))
+                    .background(semantic.card)
+                    .border(1.dp, semantic.cardBorder, RoundedCornerShape(14.dp))
                     .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Bonded Gain",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = semantic.primaryInk,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(semantic.successBg)
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                     ) {
                         Text(
-                            text = "Aggregation Gain",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(VelocityColors.CombinedGlow.copy(alpha = 0.2f))
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                        ) {
-                            Text(
-                                text = "+${res.gainPercent}% Bandwidth",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = VelocityColors.CombinedGlow,
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        ResultMetric(
-                            label = "Wi-Fi Only",
-                            mbps = res.wifiDownloadMbps,
-                            rtt = res.wifiRttMs,
-                            color = VelocityColors.WifiLink,
-                        )
-                        ResultMetric(
-                            label = "Cellular Only",
-                            mbps = res.cellularDownloadMbps,
-                            rtt = res.cellularRttMs,
-                            color = VelocityColors.CellularLink,
-                        )
-                        ResultMetric(
-                            label = "Combined Bond",
-                            mbps = res.combinedDownloadMbps,
-                            rtt = res.combinedRttMs,
-                            color = VelocityColors.CombinedGlow,
+                            text = if (res.gainPercent > 0) "+${res.gainPercent}% faster" else "Measured",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = semantic.successInk,
                         )
                     }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    BenchmarkStat("Wi-Fi", res.wifiDownloadMbps, res.wifiRttMs, semantic.wifiTint)
+                    BenchmarkStat("Cellular", res.cellularDownloadMbps, res.cellularRttMs, semantic.cellTint)
+                    BenchmarkStat("Combined", res.combinedDownloadMbps, res.combinedRttMs, semantic.successInk)
                 }
             }
         }
 
         AnimatedVisibility(visible = speedTest.errorMessage != null) {
             speedTest.errorMessage?.let { err ->
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Error: $err",
-                    fontSize = 11.sp,
-                    color = VelocityColors.StatusError,
-                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(semantic.errorBg)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    VelocityIcons.AlertCircleIcon(color = semantic.errorInk, size = 16.dp)
+                    Text(
+                        text = err,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = semantic.errorInk,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ResultMetric(label: String, mbps: Double, rtt: Double, color: Color) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+private fun BenchmarkStat(label: String, mbps: Double, rttMs: Double, accent: Color) {
+    val semantic = LocalVelocitySemantic.current
+    Column(horizontalAlignment = Alignment.Start) {
         Text(
             text = label,
-            fontSize = 10.sp,
-            color = Color.White.copy(alpha = 0.5f),
+            style = MaterialTheme.typography.labelSmall,
+            color = semantic.secondaryInk,
         )
-        Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = "${mbps.toInt()} Mbps",
-            fontSize = 14.sp,
+            text = if (mbps > 0.05) "${((mbps * 10).toInt() / 10.0)} Mbps" else "—",
+            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
             fontWeight = FontWeight.Bold,
-            color = color,
+            color = accent,
         )
         Text(
-            text = "${rtt.toInt()} ms",
-            fontSize = 10.sp,
-            color = Color.White.copy(alpha = 0.45f),
+            text = if (rttMs > 0.1) "${rttMs.toInt()} ms" else "No reply",
+            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+            color = semantic.secondaryInk,
         )
     }
 }

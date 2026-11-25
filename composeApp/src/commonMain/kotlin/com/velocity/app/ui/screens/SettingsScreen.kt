@@ -1,9 +1,16 @@
 package com.velocity.app.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -14,465 +21,576 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.velocity.app.domain.AppTunnelRule
-import com.velocity.app.domain.BondingUiState
-import com.velocity.app.domain.ThemeMode
-import com.velocity.app.domain.TunnelRulePolicy
-import com.velocity.app.domain.VelocitySettings
-import com.velocity.app.ui.theme.VelocityColors
+import com.velocity.app.domain.*
+import com.velocity.app.platform.LiquidGlassSurface
+import com.velocity.app.platform.VelocityHaptic
+import com.velocity.app.platform.rememberHapticPerformer
+import com.velocity.app.ui.components.RealtimeChart
+import com.velocity.app.ui.components.SpeedTestRunner
+import com.velocity.app.ui.components.VelocityIcons
+import com.velocity.app.ui.theme.LocalVelocityA11y
+import com.velocity.app.ui.theme.LocalVelocitySemantic
+import kotlin.math.roundToInt
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     state: BondingUiState,
     onUpdateRule: (packageName: String, policy: TunnelRulePolicy) -> Unit,
     onUpdateSettings: ((VelocitySettings) -> VelocitySettings) -> Unit,
+    onStartSpeedTest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val semantic = LocalVelocitySemantic.current
+    val haptic = rememberHapticPerformer()
     val scrollState = rememberScrollState()
-    var appSearchQuery by remember { mutableStateOf("") }
+
+    var showDiagnostics by remember { mutableStateOf(false) }
+    var showAppRulesSheet by remember { mutableStateOf(false) }
+
+    val bypassedCount = remember(state.appRules) {
+        state.appRules.count { it.policy == TunnelRulePolicy.BYPASS }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = 20.dp, vertical = 8.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text(
-            text = "TUNING & POLICIES",
-            fontSize = 11.sp,
+            text = "Settings",
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
-            letterSpacing = 0.8.sp,
-            color = Color.White.copy(alpha = 0.6f),
+            color = semantic.primaryInk,
         )
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Link Balancing & Bandwidth Card
-        LinkBalancingSettingsCard(
-            settings = state.settings,
-            onUpdateSettings = onUpdateSettings,
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Appearance & Accessibility (Apple HIG Liquid Glass)
-        AppearanceSettingsCard(
-            settings = state.settings,
-            onUpdateSettings = onUpdateSettings,
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Per-App Split Tunneling Section
-        SplitTunnelingCard(
-            rules = state.appRules,
-            searchQuery = appSearchQuery,
-            onSearchChange = { appSearchQuery = it },
-            onUpdateRule = onUpdateRule,
-        )
-
-        Spacer(modifier = Modifier.height(80.dp)) // Clearance for floating bottom pill bar
-    }
-}
-
-@Composable
-private fun LinkBalancingSettingsCard(
-    settings: VelocitySettings,
-    onUpdateSettings: ((VelocitySettings) -> VelocitySettings) -> Unit,
-) {
-    val cardBg = Color(0xFF101827).copy(alpha = 0.9f)
-    val cardBorder = Color(0xFF1F2937)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(cardBg)
-            .border(1.dp, cardBorder, RoundedCornerShape(20.dp))
-            .padding(16.dp),
-    ) {
-        Text(
-            text = "TRAFFIC & DATA CONTROLS",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.8.sp,
-            color = Color.White.copy(alpha = 0.6f),
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Wi-Fi Bias Slider
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = "Wi-Fi Scheduling Bias",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-            )
-            Text(
-                text = "${settings.wifiBiasPercent}%",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = VelocityColors.WifiLink,
-            )
-        }
-        Slider(
-            value = settings.wifiBiasPercent.toFloat(),
-            onValueChange = { value ->
-                onUpdateSettings { it.copy(wifiBiasPercent = value.toInt()) }
-            },
-            valueRange = 0f..100f,
-            steps = 9,
-            colors = SliderDefaults.colors(
-                thumbColor = VelocityColors.CyanGlow,
-                activeTrackColor = VelocityColors.WifiLink,
-                inactiveTrackColor = Color(0xFF1E293B),
-            ),
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Cellular Monthly Cap
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = "Cellular Data Cap",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color.White,
-            )
-            Text(
-                text = "${settings.cellularDataCapMb / 1024} GB",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = VelocityColors.CellularLink,
-            )
-        }
-        Slider(
-            value = (settings.cellularDataCapMb / 1024).toFloat(),
-            onValueChange = { value ->
-                onUpdateSettings { it.copy(cellularDataCapMb = value.toInt() * 1024) }
-            },
-            valueRange = 1f..30f,
-            steps = 28,
-            colors = SliderDefaults.colors(
-                thumbColor = VelocityColors.CellularLink,
-                activeTrackColor = VelocityColors.CellularLink,
-                inactiveTrackColor = Color(0xFF1E293B),
-            ),
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Adaptive FEC Toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(
-                    text = "Adaptive XOR FEC Parity",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                )
-                Text(
-                    text = "Auto-recovers packet loss on jittery links",
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.5f),
-                )
-            }
-            Switch(
-                checked = settings.fecEnabled,
+        // Section 1: Smart Network Preferences
+        SettingsGroupCard(title = "Network") {
+            SettingToggleRow(
+                title = "Auto-skip bad Wi-Fi",
+                subtitle = "Automatically fall back to Cellular if Wi-Fi loses internet",
+                checked = state.settings.autoFallbackOnNoInternet,
                 onCheckedChange = { checked ->
-                    onUpdateSettings { it.copy(fecEnabled = checked) }
+                    haptic(VelocityHaptic.TICK)
+                    onUpdateSettings { it.copy(autoFallbackOnNoInternet = checked) }
                 },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = VelocityColors.ElectricBlue,
-                    uncheckedTrackColor = Color(0xFF1E293B),
-                ),
             )
-        }
 
-        Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = semantic.cardBorder.copy(alpha = 0.6f))
 
-        // Direct DNS Guard Toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f, fill = false)) {
-                Text(
-                    text = "Direct DNS Guard (Port 53)",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                )
-                Text(
-                    text = "Prevents DNS blackholes via direct Cloudflare/Google resolver",
-                    fontSize = 10.sp,
-                    color = VelocityColors.CyanGlow.copy(alpha = 0.85f),
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Switch(
-                checked = settings.directDnsGuard,
-                onCheckedChange = { checked ->
-                    onUpdateSettings { it.copy(directDnsGuard = checked) }
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = VelocityColors.CombinedGlow,
-                    uncheckedTrackColor = Color(0xFF1E293B),
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun AppearanceSettingsCard(
-    settings: VelocitySettings,
-    onUpdateSettings: ((VelocitySettings) -> VelocitySettings) -> Unit,
-) {
-    val cardBg = Color(0xFF101827).copy(alpha = 0.9f)
-    val cardBorder = Color(0xFF1F2937)
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(cardBg)
-            .border(1.dp, cardBorder, RoundedCornerShape(20.dp))
-            .padding(16.dp),
-    ) {
-        Text(
-            text = "LIQUID GLASS & ACCESSIBILITY",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 0.8.sp,
-            color = Color.White.copy(alpha = 0.6f),
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // Reduce Transparency
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(
-                    text = "Reduce Transparency",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                )
-                Text(
-                    text = "Replaces backdrop blurs with opaque surfaces",
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.5f),
-                )
-            }
-            Switch(
-                checked = settings.reduceTransparency,
-                onCheckedChange = { checked ->
-                    onUpdateSettings { it.copy(reduceTransparency = checked) }
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = VelocityColors.ElectricBlue,
-                    uncheckedTrackColor = Color(0xFF1E293B),
-                ),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Increase Contrast
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(
-                    text = "Increase Contrast",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color.White,
-                )
-                Text(
-                    text = "Enhances specular rim highlights & card borders",
-                    fontSize = 10.sp,
-                    color = Color.White.copy(alpha = 0.5f),
-                )
-            }
-            Switch(
-                checked = settings.highContrast,
-                onCheckedChange = { checked ->
-                    onUpdateSettings { it.copy(highContrast = checked) }
-                },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = VelocityColors.ElectricBlue,
-                    uncheckedTrackColor = Color(0xFF1E293B),
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun SplitTunnelingCard(
-    rules: List<AppTunnelRule>,
-    searchQuery: String,
-    onSearchChange: (String) -> Unit,
-    onUpdateRule: (packageName: String, policy: TunnelRulePolicy) -> Unit,
-) {
-    val cardBg = Color(0xFF101827).copy(alpha = 0.9f)
-    val cardBorder = Color(0xFF1F2937)
-
-    val filteredRules = remember(rules, searchQuery) {
-        if (searchQuery.isBlank()) rules else {
-            rules.filter {
-                it.appName.contains(searchQuery, ignoreCase = true) ||
-                    it.packageName.contains(searchQuery, ignoreCase = true)
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(cardBg)
-            .border(1.dp, cardBorder, RoundedCornerShape(20.dp))
-            .padding(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "PER-APP SPLIT TUNNELING",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-                color = Color.White.copy(alpha = 0.6f),
-            )
-            Text(
-                text = "${filteredRules.size} Apps",
-                fontSize = 11.sp,
-                color = Color.White.copy(alpha = 0.5f),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchChange,
-            placeholder = { Text("Search installed applications...", fontSize = 12.sp, color = Color.Gray) },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp),
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        if (filteredRules.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (rules.isEmpty()) "No installed apps detected (Desktop mode)" else "No matching apps found",
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.45f),
-                )
-            }
-        } else {
-            for (app in filteredRules.take(20)) {
-                AppRuleRow(app = app, onPolicyChange = { onUpdateRule(app.packageName, it) })
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        }
-    }
-}
-
-@Composable
-private fun AppRuleRow(
-    app: AppTunnelRule,
-    onPolicyChange: (TunnelRulePolicy) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF0F172A))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = app.appName,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = Color.White,
-            )
-            Text(
-                text = app.packageName,
-                fontSize = 10.sp,
-                color = Color.White.copy(alpha = 0.4f),
-                maxLines = 1,
-            )
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            TunnelRulePolicy.entries.forEach { policy ->
-                val isSelected = app.policy == policy
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (isSelected) {
-                                when (policy) {
-                                    TunnelRulePolicy.BONDED -> VelocityColors.CombinedGlow.copy(alpha = 0.25f)
-                                    TunnelRulePolicy.LOW_LATENCY -> VelocityColors.ElectricBlue.copy(alpha = 0.25f)
-                                    TunnelRulePolicy.BYPASS -> Color(0xFF6B7280).copy(alpha = 0.25f)
-                                }
-                            } else {
-                                Color.Transparent
-                            },
-                        )
-                        .clickable { onPolicyChange(policy) }
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+            // Wi-Fi Preference Slider
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = policy.label,
-                        fontSize = 10.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (isSelected) Color.White else Color.White.copy(alpha = 0.45f),
+                        text = "Prefer Wi-Fi balance",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = semantic.primaryInk,
+                    )
+                    Text(
+                        text = "${state.settings.wifiBiasPercent}%",
+                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                        color = semantic.accent,
+                    )
+                }
+                Slider(
+                    value = state.settings.wifiBiasPercent.toFloat(),
+                    onValueChange = { v ->
+                        val snapped = ((v / 5f).roundToInt() * 5).coerceIn(10, 90)
+                        onUpdateSettings { it.copy(wifiBiasPercent = snapped) }
+                    },
+                    valueRange = 10f..90f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = semantic.accent,
+                        activeTrackColor = semantic.accent,
+                        inactiveTrackColor = semantic.mutedSurface,
+                    ),
+                )
+            }
+
+            HorizontalDivider(color = semantic.cardBorder.copy(alpha = 0.6f))
+
+            // Cellular Data Cap Slider
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "Cellular data limit",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = semantic.primaryInk,
+                    )
+                    Text(
+                        text = "${state.settings.cellularDataCapMb / 1024} GB",
+                        style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+                        color = semantic.cellTint,
+                    )
+                }
+                Slider(
+                    value = (state.settings.cellularDataCapMb / 1024).toFloat(),
+                    onValueChange = { v ->
+                        val gb = v.roundToInt().coerceIn(1, 30)
+                        onUpdateSettings { it.copy(cellularDataCapMb = gb * 1024) }
+                    },
+                    valueRange = 1f..30f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = semantic.cellTint,
+                        activeTrackColor = semantic.cellTint,
+                        inactiveTrackColor = semantic.mutedSurface,
+                    ),
+                )
+            }
+
+            HorizontalDivider(color = semantic.cardBorder.copy(alpha = 0.6f))
+
+            // App Bypass Navigation Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable {
+                        haptic(VelocityHaptic.TAP)
+                        showAppRulesSheet = true
+                    }
+                    .padding(vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "App routing",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = semantic.primaryInk,
+                    )
+                    Text(
+                        text = when (bypassedCount) {
+                            0 -> "All apps bonded"
+                            1 -> "1 app bypassed"
+                            else -> "$bypassedCount apps bypassed"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = semantic.secondaryInk,
+                    )
+                }
+                VelocityIcons.ChevronIcon(color = semantic.secondaryInk, size = 16.dp)
+            }
+        }
+
+        // Section 2: Appearance & Accessibility
+        SettingsGroupCard(title = "Appearance") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Color theme",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = semantic.primaryInk,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(semantic.mutedSurface)
+                        .padding(4.dp),
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val selected = state.settings.themeMode == mode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .defaultMinSize(minHeight = 42.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (selected) semantic.accent else Color.Transparent)
+                                .clickable {
+                                    haptic(VelocityHaptic.TICK)
+                                    onUpdateSettings { it.copy(themeMode = mode) }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = mode.label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (selected) semantic.onAccent else semantic.primaryInk,
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = semantic.cardBorder.copy(alpha = 0.6f))
+
+            SettingToggleRow(
+                title = "Reduce motion",
+                subtitle = "Minimizes ambient animations and transitions",
+                checked = state.settings.reduceMotion,
+                onCheckedChange = { checked ->
+                    haptic(VelocityHaptic.TICK)
+                    onUpdateSettings { it.copy(reduceMotion = checked) }
+                },
+            )
+
+            HorizontalDivider(color = semantic.cardBorder.copy(alpha = 0.6f))
+
+            SettingToggleRow(
+                title = "Reduce transparency",
+                subtitle = "Uses solid high-opacity cards and controls",
+                checked = state.settings.reduceTransparency,
+                onCheckedChange = { checked ->
+                    haptic(VelocityHaptic.TICK)
+                    onUpdateSettings { it.copy(reduceTransparency = checked) }
+                },
+            )
+        }
+
+        // Section 3: Collapsible Diagnostics & Speed Test Drawer (Collapsed by default)
+        val a11y = LocalVelocityA11y.current
+        LiquidGlassSurface(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 22.dp,
+            elevation = 6.dp,
+            reduceTransparency = a11y.reduceTransparency,
+            highContrast = a11y.highContrast,
+        ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .clickable {
+                        haptic(VelocityHaptic.TAP)
+                        showDiagnostics = !showDiagnostics
+                    },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Diagnostics & Speed Test",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = semantic.primaryInk,
+                    )
+                    Text(
+                        text = "Live throughput charts, benchmark & packet stats",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = semantic.secondaryInk,
+                    )
+                }
+                VelocityIcons.ChevronIcon(
+                    color = semantic.accent,
+                    rotatedDown = showDiagnostics,
+                    size = 18.dp,
+                )
+            }
+
+            AnimatedVisibility(
+                visible = showDiagnostics,
+                enter = fadeIn() + expandVertically(),
+                exit = fadeOut() + shrinkVertically(),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SpeedTestRunner(
+                        speedTest = state.speedTest,
+                        onStartTest = onStartSpeedTest,
+                    )
+
+                    RealtimeChart(
+                        samples = state.telemetryHistory,
+                        title = "Throughput (Mbps)",
+                        isRttChart = false,
+                    )
+
+                    RealtimeChart(
+                        samples = state.telemetryHistory,
+                        title = "Latency (ms)",
+                        isRttChart = true,
+                    )
+
+                    EngineDiagnosticsGrid(state = state)
+
+                    // Advanced Engine Toggles (tucked inside Diagnostics)
+                    SettingToggleRow(
+                        title = "Packet loss recovery (FEC)",
+                        subtitle = "Adds lightweight XOR parity on jittery links",
+                        checked = state.settings.fecEnabled,
+                        onCheckedChange = { checked ->
+                            onUpdateSettings { it.copy(fecEnabled = checked) }
+                        },
+                    )
+                    SettingToggleRow(
+                        title = "Direct DNS fallback",
+                        subtitle = "Resolves DNS safely during handshake transitions",
+                        checked = state.settings.directDnsGuard,
+                        onCheckedChange = { checked ->
+                            onUpdateSettings { it.copy(directDnsGuard = checked) }
+                        },
                     )
                 }
             }
         }
+        }
+
+        Spacer(modifier = Modifier.height(104.dp))
+        Spacer(modifier = Modifier.navigationBarsPadding())
+    }
+
+    if (showAppRulesSheet) {
+        AppRoutingBottomSheet(
+            rules = state.appRules,
+            onUpdateRule = onUpdateRule,
+            onDismiss = { showAppRulesSheet = false },
+        )
+    }
+}
+
+@Composable
+private fun SettingsGroupCard(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val semantic = LocalVelocitySemantic.current
+    val a11y = LocalVelocityA11y.current
+    LiquidGlassSurface(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 22.dp,
+        elevation = 6.dp,
+        reduceTransparency = a11y.reduceTransparency,
+        highContrast = a11y.highContrast,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = semantic.accent,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val semantic = LocalVelocitySemantic.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 52.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = semantic.primaryInk,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = semantic.secondaryInk,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = semantic.onAccent,
+                checkedTrackColor = semantic.accent,
+                uncheckedThumbColor = semantic.secondaryInk,
+                uncheckedTrackColor = semantic.mutedSurface,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun EngineDiagnosticsGrid(state: BondingUiState) {
+    val semantic = LocalVelocitySemantic.current
+    val tel = state.telemetry
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(semantic.mutedSurface.copy(alpha = 0.55f))
+            .border(1.dp, semantic.cardBorder, RoundedCornerShape(18.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = "Session Engine Details",
+            style = MaterialTheme.typography.labelLarge,
+            color = semantic.primaryInk,
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            DiagCell("Reorder Window", "${tel.reorderTimeoutMs} ms")
+            DiagCell("FEC Recovered", "${tel.fecRecoveredPackets} pkts")
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            DiagCell("Session Rx", formatBytes(tel.sessionBytesRx))
+            DiagCell("Cellular Used", "${((tel.cellularBytesUsedMb * 10).toInt() / 10.0)} MB")
+        }
+    }
+}
+
+@Composable
+private fun DiagCell(label: String, value: String) {
+    val semantic = LocalVelocitySemantic.current
+    Column {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = semantic.secondaryInk)
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+            fontWeight = FontWeight.Bold,
+            color = semantic.primaryInk,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AppRoutingBottomSheet(
+    rules: List<AppTunnelRule>,
+    onUpdateRule: (packageName: String, policy: TunnelRulePolicy) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val semantic = LocalVelocitySemantic.current
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(rules, query) {
+        if (query.isBlank()) rules else {
+            rules.filter {
+                it.appName.contains(query, ignoreCase = true) ||
+                    it.packageName.contains(query, ignoreCase = true)
+            }
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = semantic.card,
+        contentColor = semantic.primaryInk,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.82f)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "App Routing",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = semantic.primaryInk,
+            )
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Search apps…") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (filtered.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = if (rules.isEmpty()) "No device apps found" else "No matching apps",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = semantic.secondaryInk,
+                    )
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                ) {
+                    items(filtered, key = { it.packageName }) { app ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(semantic.mutedSurface.copy(alpha = 0.65f))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text(
+                                    text = app.appName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = semantic.primaryInk,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = app.packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = semantic.secondaryInk,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                TunnelRulePolicy.entries.forEach { policy ->
+                                    val selected = app.policy == policy
+                                    Box(
+                                        modifier = Modifier
+                                            .defaultMinSize(minHeight = 36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (selected) semantic.accent else Color.Transparent)
+                                            .clickable { onUpdateRule(app.packageName, policy) }
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = policy.label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) semantic.onAccent else semantic.secondaryInk,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val mb = bytes / (1024.0 * 1024.0)
+    return if (mb >= 1024.0) {
+        val gb = mb / 1024.0
+        "${((gb * 100).toInt() / 100.0)} GB"
+    } else {
+        "${((mb * 10).toInt() / 10.0)} MB"
     }
 }

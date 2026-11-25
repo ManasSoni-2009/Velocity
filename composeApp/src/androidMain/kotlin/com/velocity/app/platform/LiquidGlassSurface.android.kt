@@ -10,24 +10,23 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.velocity.app.ui.theme.LocalIsDarkTheme
+import com.velocity.app.ui.theme.LocalVelocitySemantic
+import com.velocity.app.ui.theme.VelocityColors
 
 /**
- * Android actual implementation of [LiquidGlassSurface].
- * Utilizes Android 13+ (API 33) AGSL RuntimeShader & RenderEffect for authentic
- * specular rim lighting, directional light refraction, and backdrop blur.
- * Separates backdrop blur from foreground content so child composables remain pin-sharp.
+ * Calm matte card surface (zero heavy RenderEffect layers on scrolling cards)
+ * for crisp 60/120fps scrolling and minimalist palette contrast.
  */
 @Composable
 actual fun LiquidGlassSurface(
@@ -39,128 +38,94 @@ actual fun LiquidGlassSurface(
     highContrast: Boolean,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val isDark = LocalIsDarkTheme.current
+    val semantic = LocalVelocitySemantic.current
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
 
-    // Fallback for Reduce Transparency mode
-    if (reduceTransparency) {
-        val opaqueBg = if (tint != Color.Unspecified) {
-            tint.copy(alpha = 1f)
-        } else {
-            MaterialTheme.colorScheme.surface
-        }
-        val borderColor = if (highContrast) {
-            MaterialTheme.colorScheme.outline
-        } else {
-            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        }
-
-        Box(
-            modifier = modifier
-                .shadow(elevation = elevation, shape = shape, clip = false)
-                .clip(shape)
-                .background(opaqueBg)
-                .border(
-                    width = if (highContrast) 1.5.dp else 1.dp,
-                    color = borderColor,
-                    shape = shape,
-                ),
-            content = content,
-        )
-        return
+    val surfaceColor = when {
+        tint != Color.Unspecified -> tint
+        reduceTransparency -> semantic.card
+        isDark -> VelocityColors.RoyalPlum
+        else -> VelocityColors.LilacElevated
     }
 
-    // Liquid Glass Design System Colors
-    val baseTint = if (tint != Color.Unspecified) {
-        tint
+    val borderColor = if (highContrast && isDark) {
+        VelocityColors.FrostLilac.copy(alpha = 0.55f)
     } else {
-        Color(0x28162238) // Deep translucent oceanic glass
+        semantic.cardBorder
     }
-
-    // Directional specular rim gradient (top-left luminous highlight -> bottom-right shadow)
-    val rimBrush = if (highContrast) {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.9f),
-                Color(0xFF38BDF8).copy(alpha = 0.7f),
-                Color.White.copy(alpha = 0.4f),
-            )
-        )
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.45f), // Top-left specular highlight
-                Color(0x3338BDF8),              // Luminous cyan refraction
-                Color.White.copy(alpha = 0.08f), // Subtle bottom rim
-            )
-        )
-    }
-
-    val glassBackgroundBrush = Brush.verticalGradient(
-        colors = listOf(
-            baseTint.copy(alpha = (baseTint.alpha * 1.15f).coerceAtMost(0.85f)),
-            baseTint.copy(alpha = (baseTint.alpha * 0.75f).coerceAtLeast(0.12f)),
-        )
-    )
 
     Box(
         modifier = modifier
-            .shadow(elevation = elevation, shape = shape, clip = false)
             .clip(shape)
+            .background(surfaceColor)
             .border(
                 width = if (highContrast) 1.5.dp else 1.dp,
-                brush = rimBrush,
+                color = borderColor,
                 shape = shape,
             ),
-    ) {
-        val backdropModifier = Modifier.matchParentSize().let { base: Modifier ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                base.graphicsLayer {
-                    try {
-                        renderEffect = createAgslGlassEffect()?.asComposeRenderEffect()
-                    } catch (ignored: Throwable) {}
-                }
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                base.graphicsLayer {
-                    try {
-                        renderEffect = RenderEffect
-                            .createBlurEffect(25f, 25f, Shader.TileMode.CLAMP)
-                            .asComposeRenderEffect()
-                    } catch (ignored: Throwable) {}
-                }
-            } else {
-                base
-            }
+        content = content,
+    )
+}
+
+actual fun Modifier.liquidGlassBackdropFilter(
+    reduceTransparency: Boolean,
+): Modifier {
+    if (reduceTransparency) return this
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val effect = createContainerGlassRenderEffect()
+        if (effect != null) {
+            graphicsLayer { renderEffect = effect.asComposeRenderEffect() }
+        } else {
+            blur(20.dp)
         }
-
-        // Isolated backdrop layer: blur and translucent glass gradient
-        Box(
-            modifier = backdropModifier.background(glassBackgroundBrush),
-        )
-
-        // Foreground content layer: pin-sharp, unblurred icons and typography
-        content()
+    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        blur(20.dp)
+    } else {
+        this
     }
 }
 
-private const val AGSL_GLASS_SHADER = """
+// Ports the SVG <filter id="container-glass"> (feTurbulence + feDisplacementMap + feGaussianBlur)
+// into an Android 13+ AGSL RuntimeShader applied exclusively to the floating navbar backdrop.
+private const val CONTAINER_GLASS_AGSL = """
     uniform shader contentShader;
-    
+
+    float hash21(float2 p) {
+        p = fract(p * float2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
+    }
+
+    float smoothNoise(float2 p) {
+        float2 i = floor(p);
+        float2 f = fract(p);
+        float2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash21(i);
+        float b = hash21(i + float2(1.0, 0.0));
+        float c = hash21(i + float2(0.0, 1.0));
+        float d = hash21(i + float2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+    }
+
     half4 main(float2 fragCoord) {
-        half4 color = contentShader.eval(fragCoord);
-        // Directional specular luminescence
-        float rim = (1.0 - (fragCoord.y * 0.001)) * 0.08;
-        color.rgb += half3(rim);
-        return color;
+        float2 scaled = fragCoord * 0.035;
+        float nx = smoothNoise(scaled) - 0.5;
+        float ny = smoothNoise(scaled + float2(17.3, 9.7)) - 0.5;
+        float2 displaced = fragCoord + float2(nx, ny) * 14.0;
+        return contentShader.eval(displaced);
     }
 """
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private fun createAgslGlassEffect(): RenderEffect? {
+private fun createContainerGlassRenderEffect(): RenderEffect? {
     return try {
-        val blurEffect = RenderEffect.createBlurEffect(30f, 30f, Shader.TileMode.CLAMP)
-        val shader = RuntimeShader(AGSL_GLASS_SHADER)
-        RenderEffect.createRuntimeShaderEffect(shader, "contentShader")
-    } catch (e: Throwable) {
+        val preBlur = RenderEffect.createBlurEffect(8f, 8f, Shader.TileMode.CLAMP)
+        val shader = RuntimeShader(CONTAINER_GLASS_AGSL)
+        val displace = RenderEffect.createRuntimeShaderEffect(shader, "contentShader")
+        val finalBlur = RenderEffect.createBlurEffect(26f, 26f, Shader.TileMode.CLAMP)
+        RenderEffect.createChainEffect(finalBlur, RenderEffect.createChainEffect(displace, preBlur))
+    } catch (_: Throwable) {
         null
     }
 }
